@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Shorts Limiter</h1>
+    
+    <div class="stats">
+      <div class="stat-item">
+         <span class="stat-label">Сегодня:</span>
+        <span id="todayTime" class="stat-value">0м</span>
+        <span id="activeIndicator" class="active-indicator" style="display: none;"></span>
+      </div>
+      <div class="progress-container">
+        <div id="progressBar" class="progress-bar"></div>
+      </div>
+      <div class="limit-info">
+        Лимит: <span id="dailyLimit">30</span> минут
+      </div>
+    </div>
+    
+    <div class="history">
+      <h3>Недельная статистика</h3>
+      <div id="chart" class="chart"></div>
+    </div>
+    
+    <div class="actions">
+      <button id="settingsBtn">Настройки</button>
+      <button id="resetToday">Сбросить сегодня</button>
+    </div>
+    
+    <div class="version">Free Version</div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Настройки Shorts Limiter</title>
+    <link rel="stylesheet" href="options.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>⚙️ Настройки Shorts Limiter</h1>
+            <p class="subtitle">Контролируйте своё время на YouTube Shorts</p>
+        </header>
+
+        <main class="main-content">
+            <section class="settings-section">
+                <h2>📊 Основные настройки</h2>
+                
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <h3>Дневной лимит времени</h3>
+                        <p>Сколько минут в день вы разрешаете себе смотреть Shorts</p>
+                    </div>
+                    <div class="setting-control">
+                        <input type="range" id="dailyLimitSlider" min="5" max="180" step="5" value="30">
+                        <div class="slider-value">
+                            <span id="dailyLimitValue">30</span> минут
+                        </div>
+                    </div>
+                </div>
+
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <h3>Видео для перенаправления</h3>
+                        <p>Когда лимит исчерпан, вы будете перенаправлены на это видео</p>
+                    </div>
+                    <div class="setting-control">
+                        <input type="url" id="redirectUrl" 
+                               placeholder="https://www.youtube.com/watch?v=..."
+                               class="url-input">
+                        <div class="input-hint">
+                            Вставьте ссылку на YouTube видео
+                        </div>
+                    </div>
+                </div>
+
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <h3>Тестовое перенаправление</h3>
+                        <p>Проверьте, как работает перенаправление</p>
+                    </div>
+                    <div class="setting-control">
+                        <button id="testRedirect" class="test-btn">
+                            🔄 Тестировать перенаправление
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="settings-section">
+                <h2>📈 Статистика</h2>
+                
+                <div class="stats-container">
+                    <div class="stat-card">
+                        <div class="stat-icon">⏱️</div>
+                        <div class="stat-content">
+                            <div class="stat-label">Время сегодня</div>
+                            <div class="stat-value" id="statsToday">0 минут</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon">📅</div>
+                        <div class="stat-content">
+                            <div class="stat-label">Дней отслеживания</div>
+                            <div class="stat-value" id="statsDays">0</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon">🎯</div>
+                        <div class="stat-content">
+                            <div class="stat-label">Среднее в день</div>
+                            <div class="stat-value" id="statsAverage">0 минут</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="reset-section">
+                    <button id="resetStats" class="reset-btn">
+                        🗑️ Сбросить всю статистику
+                    </button>
+                    <p class="warning-text">Это действие нельзя отменить!</p>
+                </div>
+            </section>
+
+            <section class="premium-section">
+                <div class="premium-card">
+                    <div class="premium-header">
+                        <span class="premium-badge">✨ ПРЕМИУМ</span>
+                        <h3>Улучшенная версия</h3>
+                    </div>
+                    <ul class="premium-features">
+                        <li>✅ ИИ-анализ эмоций в ленте</li>
+                        <li>✅ Подробные отчёты и тренды</li>
+                        <li>✅ Интеграция с календарями</li>
+                        <li>✅ Расширенная аналитика</li>
+                        <li>✅ Сравнение с другими пользователями</li>
+                    </ul>
+                    <button id="upgradeBtn" class="upgrade-btn">
+                        🚀 Обновить до Premium
+                    </button>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <div class="actions">
+                <button id="saveBtn" class="save-btn">💾 Сохранить настройки</button>
+                <button id="cancelBtn" class="cancel-btn">❌ Отмена</button>
+            </div>
+            <div class="status-message" id="statusMessage"></div>
+            <div class="version-info">
+                Shorts Limiter v1.0 | Free Version
+            </div>
+        </footer>
+    </div>
+
+    <script src="options.js"></script>
+</body>
+</html>
