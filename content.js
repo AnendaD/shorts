@@ -173,42 +173,66 @@ function trackVideoLoop() {
 }
 
 function checkIfOnShortsPage() {
-    const url = window.location.href;
-    
-    // СТРОГАЯ проверка URL - только прямые ссылки на Shorts
-    const isExactShortsUrl = 
-        url.includes('/shorts/') || 
-        url.includes('youtube.com/shorts') && 
-        (url.includes('/shorts') || url.includes('/shorts/'));
-    
-    // Проверяем pathname
-    const pathname = window.location.pathname;
-    const isShortsPathname = pathname.startsWith('/shorts/');
-    
-    // ДОПОЛНИТЕЛЬНО: проверяем, что это не главная страница
-    const isHomePage = pathname === '/' || pathname === '' || pathname === '/feed/subscriptions' || 
-                      pathname === '/feed/explore' || pathname === '/feed/trending';
-    
-    // Если это главная страница - точно НЕ Shorts
-    if (isHomePage) {
-        console.log('ℹ️ Это главная страница YouTube, не Shorts');
+    try {
+        const url = window.location.href;
+        
+        // Проверка по URL
+        const isShortsUrl = url.includes('/shorts/');
+        
+        if (!isShortsUrl) {
+            return false;
+        }
+        
+        // Дополнительная проверка: ищем специфичный прогресс-бар шортсов
+        const shortsProgressBar = document.querySelector('[role="slider"].ytPlayerProgressBarDragContainer');
+        if (shortsProgressBar) {
+            return true;
+        }
+        
+        // Традиционные проверки DOM
+        const hasShortsElements = 
+            document.querySelector('ytd-shorts, [is-shorts], #shorts-container') !== null;
+        
+        return hasShortsElements;
+    } catch (error) {
         return false;
     }
-    
-    // Проверяем DOM элементы, но только если URL соответствует
-    if (isExactShortsUrl || isShortsPathname) {
-        const hasShortsPlayer = document.querySelector('ytd-shorts, [is-shorts], #shorts-container') !== null;
-        return hasShortsPlayer;
-    }
-    
-    return false;
 }
 
 function isVideoPlaying() {
-    const video = document.querySelector('video');
-    if (!video) return false;
+    // Сначала проверяем по прогресс-бару (самый надежный способ)
+    const byProgress = isVideoPlayingByProgress();
     
-    return !video.paused && !video.ended && video.readyState > 2;
+    // Затем проверяем традиционным способом для подстраховки
+    const byVideoElement = isVideoPlayingByElement();
+    
+    // Если хотя бы один метод говорит, что видео играет - считаем, что играет
+    return byProgress || byVideoElement;
+}
+
+function isVideoPlayingByElement() {
+    try {
+        // Ищем ВСЕ видео элементы на странице
+        const videos = document.querySelectorAll('video');
+        
+        if (!videos || videos.length === 0) {
+            return false;
+        }
+        
+        // Проверяем все видео элементы
+        for (const video of videos) {
+            if (video.readyState >= 2 && // HAVE_CURRENT_DATA или больше
+                !video.paused && 
+                !video.ended && 
+                video.currentTime > 0) {
+                return true;
+            }
+        }
+        
+        return false;
+    } catch (error) {
+        return false;
+    }
 }
 
 // НОВОЕ: Проверка, что окно активно
@@ -345,7 +369,7 @@ function sendHeartbeat() {
         const currentTime = Date.now();
         const timeSpent = Math.floor((currentTime - startTime) / 1000);
         
-        console.log('💓 Heartbeat:', timeSpent, 'сек');
+        //console.log('💓 Heartbeat:', timeSpent, 'сек');
         
         chrome.runtime.sendMessage({
             type: 'SHORTS_HEARTBEAT',
@@ -380,12 +404,32 @@ function monitorShorts() {
     const videoPlaying = isVideoPlaying();
     const windowActive = isWindowActive();
     
+    // Только логируем если на шортс
     if (currentlyOnShorts) {
+        // Получаем информацию о прогрессе
+        let progressInfo = { value: 0, found: false };
+        try {
+            const progressSlider = document.querySelector('[role="slider"][aria-valuenow]');
+            if (progressSlider) {
+                progressInfo = {
+                    value: parseInt(progressSlider.getAttribute('aria-valuenow') || '0'),
+                    text: progressSlider.getAttribute('aria-valuetext') || '',
+                    found: true
+                };
+            }
+        } catch (e) {
+            // Игнорируем ошибки
+        }
+        
         console.log('🔍 Мониторинг Shorts:', {
-            onShortsPage: currentlyOnShorts,
+            onShortsPage: true,
             videoPlaying: videoPlaying,
+            byProgress: isVideoPlayingByProgress(),
+            byElement: isVideoPlayingByElement(),
             windowActive: windowActive,
-            isTracking: isWatchingShorts
+            isTracking: isWatchingShorts,
+            progress: progressInfo,
+            videoElements: document.querySelectorAll('video').length
         });
     }
     
@@ -489,18 +533,23 @@ function init() {
     console.log('🚀 Shorts Limiter запущен на YouTube');
     console.log('📍 Текущий URL:', window.location.href);
     
-    // НОВОЕ: Настройка отслеживания активности
+    // Настройка отслеживания активности
     setupActivityTracking();
+    
+    // Настройка наблюдателя за прогресс-баром
+    setupProgressBarObserver();
     
     setupVideoListeners();
     
     console.log('⚡ Немедленная проверка при загрузке');
     monitorShorts();
     
+    // Запланированные проверки
     setTimeout(() => {
         console.log('⏰ Проверка через 500ms');
         monitorShorts();
         setupVideoListeners();
+        setupProgressBarObserver(); // Повторная попытка найти прогресс-бар
     }, 500);
     
     setTimeout(() => {
@@ -637,3 +686,111 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     return true;
 });
+
+
+function isVideoPlayingByProgress() {
+    try {
+        // Ищем прогресс-бар воспроизведения
+        const progressSlider = document.querySelector('[role="slider"][aria-valuenow]');
+        
+        if (!progressSlider) {
+            // console.log('❌ Прогресс-бар не найден');
+            return false;
+        }
+        
+        const currentValue = parseInt(progressSlider.getAttribute('aria-valuenow'));
+        const valueText = progressSlider.getAttribute('aria-valuetext') || '';
+        
+        // console.log('🔍 Прогресс-бар:', {
+        //     currentValue: currentValue,
+        //     valueText: valueText,
+        //     slider: progressSlider.className
+        // });
+        
+        // Если значение больше 0 и меньше 100, значит видео играет
+        // (0% - начало, 100% - конец, но обычно видео заканчивается немного раньше)
+        if (currentValue > 0 && currentValue < 99) {
+            return true;
+        }
+        
+        // Дополнительная проверка: если текст содержит "%" и не "0%"
+        if (valueText.includes('%') && !valueText.includes('0%')) {
+            return true;
+        }
+        
+        return false;
+    } catch (error) {
+        console.warn('⚠️ Ошибка в isVideoPlayingByProgress:', error);
+        return false;
+    }
+}
+
+
+let progressObserver = null;
+let lastProgressValue = 0;
+let progressUpdateTime = 0;
+
+function setupProgressBarObserver() {
+    try {
+        // Если уже есть наблюдатель, очищаем его
+        if (progressObserver) {
+            progressObserver.disconnect();
+        }
+        
+        // Создаем MutationObserver для отслеживания изменений прогресс-бара
+        progressObserver = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.type === 'attributes' && 
+                    (mutation.attributeName === 'aria-valuenow' || 
+                     mutation.attributeName === 'aria-valuetext')) {
+                    
+                    const slider = mutation.target;
+                    const currentValue = parseInt(slider.getAttribute('aria-valuenow') || '0');
+                    const now = Date.now();
+                    
+                    // Проверяем, изменилось ли значение
+                    if (currentValue !== lastProgressValue) {
+                        lastProgressValue = currentValue;
+                        progressUpdateTime = now;
+                        
+                        // console.log('📊 Прогресс-бар обновлен:', {
+                        //     value: currentValue,
+                        //     text: slider.getAttribute('aria-valuetext'),
+                        //     time: new Date().toLocaleTimeString()
+                        // });
+                        
+                        // Если видео играет (значение больше 0), но мы еще не отслеживаем
+                        if (currentValue > 0 && currentValue < 99 && 
+                            !isWatchingShorts && checkIfOnShortsPage()) {
+                            console.log('🔄 Обнаружено воспроизведение по прогресс-бару, начинаем отслеживание');
+                            startTracking();
+                        }
+                        
+                        // Обновляем активность пользователя
+                        lastUserActivity = now;
+                    }
+                }
+            });
+        });
+        
+        // Находим прогресс-бар и начинаем наблюдение
+        const progressSlider = document.querySelector('[role="slider"][aria-valuenow]');
+        if (progressSlider) {
+            lastProgressValue = parseInt(progressSlider.getAttribute('aria-valuenow') || '0');
+            progressUpdateTime = Date.now();
+            
+            progressObserver.observe(progressSlider, {
+                attributes: true,
+                attributeFilter: ['aria-valuenow', 'aria-valuetext']
+            });
+            
+            console.log('👀 Наблюдение за прогресс-баром начато');
+        } else {
+            console.log('🔍 Прогресс-бар не найден, попробуем позже');
+            // Пробуем найти через 1 секунду
+            setTimeout(setupProgressBarObserver, 1000);
+        }
+    } catch (error) {
+        console.warn('⚠️ Ошибка в setupProgressBarObserver:', error);
+    }
+}

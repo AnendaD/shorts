@@ -1,4 +1,17 @@
+console.log('=== DEBUG: Отслеживание редиректов ===');
+let redirectLog = [];
 
+function logRedirect(tabId, reason, fromFunction) {
+    const entry = {
+        time: new Date().toISOString(),
+        tabId: tabId,
+        reason: reason,
+        from: fromFunction,
+        stack: new Error().stack
+    };
+    redirectLog.push(entry);
+    console.log('📝 Лог редиректа:', entry);
+}
 // Хранилище активной сессии (только одна!)
 let activeSession = null;
 let activeTabId = null;
@@ -187,11 +200,11 @@ function handleShortsHeartbeat(message, tabId, sendResponse) {
                     updateStats(timeIncrement);
                     session.lastSavedTime = currentTimeSpent;
                     
-                    console.log('💓 Хартбит от вкладки', tabId, {
-                        currentTimeSpent: currentTimeSpent,
-                        increment: timeIncrement,
-                        newDailyTime: newDailyTime
-                    });
+                    // console.log('💓 Хартбит от вкладки', tabId, {
+                    //     currentTimeSpent: currentTimeSpent,
+                    //     increment: timeIncrement,
+                    //     newDailyTime: newDailyTime
+                    // });
                 }
             }
             
@@ -274,6 +287,7 @@ function updateStats(timeSpent) {
 }
 
 function handleLimitExceeded(redirectUrl, tabId) {
+    logRedirect(tabId, 'limit_exceeded', 'handleLimitExceeded');
     console.log('🚫 Лимит исчерпан, перенаправляем вкладку', tabId);
     
     // ИСПРАВЛЕНО: Редиректим только указанную вкладку
