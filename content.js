@@ -5,6 +5,10 @@ let currentTabId = null;
 let lastUrl = window.location.href;
 let limitReached = false;
 let redirectUrl = null;
+let lastProgressValue = -1;
+let lastProgressUpdate = Date.now();
+let progressStuckTimer = null;
+let windowHasFocus = true; // Добавляем флаг фокуса окна
 
 // Получаем ID вкладки
 chrome.runtime.sendMessage({ type: 'GET_TAB_ID' }, (response) => {
@@ -28,33 +32,53 @@ function checkIfOnShortsPage() {
     }
 }
 
-// Проверяем, играет ли видео
+// Проверяем, играет ли видео по прогресс-бару
 function isVideoPlaying() {
-    // Ищем кнопку с title="Приостановить (K)" - это значит видео ИГРАЕТ
-    const pauseButton = document.querySelector('.yt-spec-button-shape-next.yt-spec-button-shape-next--tonal.yt-spec-button-shape-next--overlay-dark.yt-spec-button-shape-next--size-l.yt-spec-button-shape-next--icon-button.yt-spec-button-shape-next--enable-drop-shadow-experiment[title="Приостановить (K)"]');
-    
-    // Если нашли кнопку "Приостановить" - видео играет
-    if (pauseButton) {
-        return true;
-    }
-    
-    // Ищем кнопку с title="Воспроизвести (K)" - это значит видео НА ПАУЗЕ
-    const playButton = document.querySelector('.yt-spec-button-shape-next.yt-spec-button-shape-next--tonal.yt-spec-button-shape-next--overlay-dark.yt-spec-button-shape-next--size-l.yt-spec-button-shape-next--icon-button.yt-spec-button-shape-next--enable-drop-shadow-experiment[title="Воспроизвести (K)"]');
-    
-    // Если нашли кнопку "Воспроизвести" - видео на паузе
-    if (playButton) {
+    // Если окно не в фокусе - видео не играет
+    if (!windowHasFocus) {
         return false;
     }
     
-    // Если ни одна кнопка не найдена, пробуем найти любую кнопку управления
-    const anyButton = document.querySelector('.yt-spec-button-shape-next.yt-spec-button-shape-next--tonal.yt-spec-button-shape-next--overlay-dark.yt-spec-button-shape-next--size-l.yt-spec-button-shape-next--icon-button.yt-spec-button-shape-next--enable-drop-shadow-experiment');
+    // Находим элемент прогресс-бара
+    const progressBar = document.querySelector('div[role="slider"].ytPlayerProgressBarDragContainer');
     
-    if (anyButton) {
-        const title = anyButton.getAttribute('title') || '';
-        return title === 'Приостановить (K)';
+    if (!progressBar) {
+        return false;
     }
     
-    return false; // По умолчанию считаем, что видео не играет
+    // Получаем текущее значение прогресса
+    const currentValue = parseInt(progressBar.getAttribute('aria-valuenow') || '0');
+    const now = Date.now();
+    
+    // Если значение изменилось с момента последней проверки
+    if (currentValue !== lastProgressValue) {
+        lastProgressValue = currentValue;
+        lastProgressUpdate = now;
+        
+        // Сбрасываем таймер "застрявшего" прогресса
+        clearTimeout(progressStuckTimer);
+        
+        // Если видео не на паузе (значение меняется), но мы еще не отслеживаем
+        if (!isTracking && checkIfOnShortsPage()) {
+            console.log('📊 Прогресс изменился:', currentValue, '%');
+        }
+        
+        // Видео явно играет, если значение прогресса меняется
+        return true;
+    }
+    
+    // Если значение не менялось какое-то время
+    const timeSinceLastUpdate = now - lastProgressUpdate;
+    
+    // Видео считается играющим, если:
+    // 1. Прогресс между 1% и 99%
+    // 2. И последнее обновление было меньше 1.5 секунд назад
+    // 3. Окно в фокусе
+    if (currentValue > 0 && currentValue < 99 && timeSinceLastUpdate < 1500 && windowHasFocus) {
+        return true;
+    }
+    
+    return false;
 }
 
 // Проверяем лимит перед началом отслеживания
@@ -129,6 +153,10 @@ function stopTracking() {
         intervalId = null;
     }
     
+    // Очищаем таймер застрявшего прогресса
+    clearTimeout(progressStuckTimer);
+    progressStuckTimer = null;
+    
     const timeSpent = Math.floor((endTime - startTime) / 1000);
     
     console.log('⏹️ Останавливаем отслеживание, время:', timeSpent, 'сек');
@@ -147,7 +175,7 @@ function stopTracking() {
 
 // Отправляем heartbeat каждую секунду
 function sendHeartbeat() {
-    if (isTracking && startTime) {
+    if (isTracking && startTime && windowHasFocus) {
         const currentTime = Date.now();
         const timeSpent = Math.floor((currentTime - startTime) / 1000);
         
@@ -171,6 +199,20 @@ function sendHeartbeat() {
     }
 }
 
+// Функция для проверки "застрял" ли прогресс
+function checkProgressStuck() {
+    if (!isTracking || !checkIfOnShortsPage()) return;
+    
+    const now = Date.now();
+    const timeSinceLastUpdate = now - lastProgressUpdate;
+    
+    // Если прогресс не обновлялся более 1.5 секунд - видео на паузе
+    if (timeSinceLastUpdate > 1500) {
+        console.log('⏸️ Прогресс не обновляется', timeSinceLastUpdate, 'мс - видео на паузе');
+        stopTracking();
+    }
+}
+
 // Основная функция проверки состояния
 function checkVideoState() {
     // Если не на шортсах - останавливаем
@@ -183,7 +225,7 @@ function checkVideoState() {
     }
     
     const videoPlaying = isVideoPlaying();
-    console.log('🔍 Проверка: на шортсах, видео играет?', videoPlaying, 'отслеживаем?', isTracking);
+    console.log('🔍 Проверка: на шортсах, видео играет?', videoPlaying, 'отслеживаем?', isTracking, 'окно в фокусе?', windowHasFocus);
     
     // Если видео играет и мы еще не отслеживаем
     if (videoPlaying && !isTracking) {
@@ -195,45 +237,56 @@ function checkVideoState() {
         console.log('⏸️ Видео на паузе, останавливаем');
         stopTracking();
     }
+    
+    // Если видео играет, устанавливаем таймер для проверки "застрявшего" прогресса
+    if (videoPlaying && isTracking) {
+        clearTimeout(progressStuckTimer);
+        progressStuckTimer = setTimeout(checkProgressStuck, 1600);
+    }
 }
 
-// Создаем наблюдатель за кнопкой управления
-let buttonObserver = null;
+// Создаем наблюдатель за прогресс-баром
+let progressObserver = null;
 
-function setupButtonObserver() {
+function setupProgressObserver() {
     try {
         // Очищаем предыдущего наблюдателя
-        if (buttonObserver) {
-            buttonObserver.disconnect();
-            buttonObserver = null;
+        if (progressObserver) {
+            progressObserver.disconnect();
+            progressObserver = null;
         }
         
-        // Ищем кнопку управления
-        const button = document.querySelector('.yt-spec-button-shape-next.yt-spec-button-shape-next--tonal.yt-spec-button-shape-next--overlay-dark.yt-spec-button-shape-next--size-l.yt-spec-button-shape-next--icon-button.yt-spec-button-shape-next--enable-drop-shadow-experiment');
+        // Ищем прогресс-бар
+        const progressBar = document.querySelector('div[role="slider"].ytPlayerProgressBarDragContainer');
         
-        if (!button) {
-            console.log('🔍 Кнопка управления не найдена, пробую через 500мс');
-            setTimeout(setupButtonObserver, 500);
+        if (!progressBar) {
+            console.log('🔍 Прогресс-бар не найден, пробую через 500мс');
+            setTimeout(setupProgressObserver, 500);
             return;
         }
         
-        console.log('✅ Найдена кнопка управления, title:', button.getAttribute('title'));
+        // Получаем начальное значение
+        const initialValue = parseInt(progressBar.getAttribute('aria-valuenow') || '0');
+        lastProgressValue = initialValue;
+        lastProgressUpdate = Date.now();
         
-        // Создаем наблюдатель за изменениями title кнопки
-        buttonObserver = new MutationObserver((mutations) => {
+        console.log('✅ Найден прогресс-бар, начальное значение:', initialValue, '%');
+        
+        // Создаем наблюдатель за изменениями aria-valuenow
+        progressObserver = new MutationObserver((mutations) => {
             mutations.forEach(mutation => {
-                if (mutation.type === 'attributes' && mutation.attributeName === 'title') {
-                    const newTitle = button.getAttribute('title') || '';
-                    console.log('🔄 Изменен title кнопки:', newTitle);
+                if (mutation.type === 'attributes' && mutation.attributeName === 'aria-valuenow') {
+                    const newValue = parseInt(mutation.target.getAttribute('aria-valuenow') || '0');
+                    console.log('🔄 Изменен прогресс:', newValue, '%');
                     checkVideoState();
                 }
             });
         });
         
-        // Начинаем наблюдение за атрибутом title
-        buttonObserver.observe(button, {
+        // Начинаем наблюдение за атрибутом aria-valuenow
+        progressObserver.observe(progressBar, {
             attributes: true,
-            attributeFilter: ['title']
+            attributeFilter: ['aria-valuenow']
         });
         
         // Проверяем начальное состояние
@@ -242,8 +295,8 @@ function setupButtonObserver() {
         }, 300);
         
     } catch (error) {
-        console.warn('⚠️ Ошибка в setupButtonObserver:', error);
-        setTimeout(setupButtonObserver, 1000);
+        console.warn('⚠️ Ошибка в setupProgressObserver:', error);
+        setTimeout(setupProgressObserver, 1000);
     }
 }
 
@@ -254,6 +307,12 @@ function checkUrlChange() {
         if (currentUrl !== lastUrl) {
             console.log('🌐 URL изменился:', currentUrl);
             lastUrl = currentUrl;
+            
+            // Сбрасываем значения прогресса при смене URL
+            lastProgressValue = -1;
+            lastProgressUpdate = Date.now();
+            clearTimeout(progressStuckTimer);
+            progressStuckTimer = null;
             
             // Проверяем лимит при каждом изменении URL
             checkLimitBeforeStart((isLimitReached) => {
@@ -268,7 +327,7 @@ function checkUrlChange() {
                         checkVideoState();
                         // Переинициализируем наблюдатель для нового шортса
                         if (currentUrl.includes('/shorts/')) {
-                            setTimeout(setupButtonObserver, 500);
+                            setTimeout(setupProgressObserver, 500);
                         }
                     }, 300);
                 }
@@ -294,24 +353,26 @@ function init() {
             }
         }
         
-        // Инициализируем наблюдение за кнопкой
-        setupButtonObserver();
+        // Инициализируем наблюдение за прогресс-баром
+        setupProgressObserver();
         
         // Проверяем изменение URL каждую секунду
         const urlCheckInterval = setInterval(checkUrlChange, 1000);
         
-        // Проверяем состояние видео каждые 2 секунды
-        const stateCheckInterval = setInterval(checkVideoState, 2000);
+        // Проверяем состояние видео каждые 1 секунды
+        const stateCheckInterval = setInterval(checkVideoState, 1000);
         
         // Останавливаем при скрытии страницы
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
                 console.log('👁️ Страница скрыта, останавливаем отслеживание');
+                windowHasFocus = false;
                 if (isTracking) {
                     stopTracking();
                 }
             } else {
                 console.log('👁️ Страница видима, проверяем состояние');
+                windowHasFocus = true;
                 setTimeout(checkVideoState, 500);
             }
         });
@@ -319,6 +380,7 @@ function init() {
         // Останавливаем при потере фокуса окна
         window.addEventListener('blur', () => {
             console.log('🔇 Окно потеряло фокус, останавливаем отслеживание');
+            windowHasFocus = false;
             if (isTracking) {
                 stopTracking();
             }
@@ -326,8 +388,13 @@ function init() {
         
         window.addEventListener('focus', () => {
             console.log('🔊 Окно получило фокус, проверяем состояние');
+            windowHasFocus = true;
             setTimeout(checkVideoState, 500);
         });
+        
+        // Также проверяем состояние окна при загрузке
+        windowHasFocus = document.hasFocus();
+        console.log('🎯 Начальное состояние фокуса окна:', windowHasFocus ? 'в фокусе' : 'не в фокусе');
         
         // Останавливаем при закрытии вкладки
         window.addEventListener('beforeunload', () => {
@@ -336,6 +403,7 @@ function init() {
             }
             clearInterval(urlCheckInterval);
             clearInterval(stateCheckInterval);
+            clearTimeout(progressStuckTimer);
         });
         
         // Отслеживаем изменения истории
