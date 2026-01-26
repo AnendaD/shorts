@@ -86,11 +86,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             checkLimitAndRespond(sender.tab.id, sendResponse);
             return true;
             
-        // НОВОЕ: Обработка сообщений от popup
+        // Обработка сообщений от popup
         case 'POPUP_OPENED':
             popupOpen = true;
             popupWindowId = sender.windowId;
             console.log('📊 Popup открыт, ID окна:', popupWindowId);
+            
+            // ОТПРАВЛЯЕМ ВСЕМ ВКЛАДКАМ YOUTUBE
+            chrome.tabs.query({url: "*://*.youtube.com/*"}, (tabs) => {
+                tabs.forEach(tab => {
+                    chrome.tabs.sendMessage(tab.id, {
+                        type: 'POPUP_STATUS',
+                        isOpen: true
+                    }).catch(() => {});
+                });
+            });
+            
             sendResponse({ success: true });
             break;
             
@@ -98,6 +109,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             popupOpen = false;
             popupWindowId = null;
             console.log('📊 Popup закрыт');
+
+            // ОТПРАВЛЯЕМ ВСЕМ ВКЛАДКАМ YOUTUBE
+            chrome.tabs.query({url: "*://*.youtube.com/*"}, (tabs) => {
+                tabs.forEach(tab => {
+                    chrome.tabs.sendMessage(tab.id, {
+                        type: 'POPUP_STATUS',
+                        isOpen: false
+                    }).catch(() => {});
+                });
+            });
+
             sendResponse({ success: true });
             break;
             

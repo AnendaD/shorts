@@ -9,6 +9,7 @@ let lastProgressValue = -1;
 let lastProgressUpdate = Date.now();
 let progressStuckTimer = null;
 let windowHasFocus = true; 
+let popupOpen = false;
 
 // Получаем ID вкладки
 chrome.runtime.sendMessage({ type: 'GET_TAB_ID' }, (response) => {
@@ -34,11 +35,6 @@ function checkIfOnShortsPage() {
 
 // Проверяем, играет ли видео по прогресс-бару
 function isVideoPlaying() {
-    // Если окно не в фокусе - видео не играет
-    if (!windowHasFocus) {
-        return false;
-    }
-    
     // Находим элемент прогресс-бара
     const progressBar = document.querySelector('div[role="slider"].ytPlayerProgressBarDragContainer');
     
@@ -58,11 +54,6 @@ function isVideoPlaying() {
         // Сбрасываем таймер "застрявшего" прогресса
         clearTimeout(progressStuckTimer);
         
-        // Если видео не на паузе (значение меняется), но мы еще не отслеживаем
-        if (!isTracking && checkIfOnShortsPage()) {
-            console.log('📊 Прогресс изменился:', currentValue, '%');
-        }
-        
         // Видео явно играет, если значение прогресса меняется
         return true;
     }
@@ -70,10 +61,9 @@ function isVideoPlaying() {
     // Если значение не менялось какое-то время
     const timeSinceLastUpdate = now - lastProgressUpdate;
     
-    // Видео считается играющим, если:
-    // 1. И последнее обновление было меньше 1.5 секунд назад
-    // 2. Окно в фокусе
-    if ( timeSinceLastUpdate < 1500 && windowHasFocus) {
+    // Видео считается играющим, если последнее обновление было меньше 1.5 секунд назад
+    // НЕ ЗАВИСИМО от windowHasFocus или popupOpen
+    if (timeSinceLastUpdate < 1500) {
         return true;
     }
     
@@ -174,7 +164,7 @@ function stopTracking() {
 
 // Отправляем heartbeat каждую секунду
 function sendHeartbeat() {
-    if (isTracking && startTime && windowHasFocus) {
+    if (isTracking && startTime) {
         const currentTime = Date.now();
         const timeSpent = Math.floor((currentTime - startTime) / 1000);
         
@@ -224,6 +214,13 @@ function checkVideoState() {
     }
     
     const videoPlaying = isVideoPlaying();
+    
+    console.log('🔍 Проверка состояния:', {
+        videoPlaying: videoPlaying,
+        isTracking: isTracking,
+        windowHasFocus: windowHasFocus,
+        popupOpen: popupOpen
+    });
 
     // Если видео играет и мы еще не отслеживаем
     if (videoPlaying && !isTracking) {
@@ -362,30 +359,34 @@ function init() {
         // Останавливаем при скрытии страницы
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
-                console.log('👁️ Страница скрыта, останавливаем отслеживание');
-                windowHasFocus = false;
+                console.log('👁️ Страница скрыта (не видна), останавливаем отслеживание');
+                // Страница полностью скрыта (например, переключились на другую вкладку)
                 if (isTracking) {
                     stopTracking();
                 }
             } else {
                 console.log('👁️ Страница видима, проверяем состояние');
-                windowHasFocus = true;
                 setTimeout(checkVideoState, 500);
             }
         });
         
         // Останавливаем при потере фокуса окна
         window.addEventListener('blur', () => {
-            console.log('🔇 Окно потеряло фокус, останавливаем отслеживание');
+            console.log('🔇 Окно потеряло фокус, popup открыт?', popupOpen);
             windowHasFocus = false;
-            if (isTracking) {
+            
+            // Если открыт popup - НЕ останавливаем отслеживание
+            if (!popupOpen && isTracking) {
+                console.log('⏸️ Окно потеряло фокус (не popup), останавливаем отслеживание');
                 stopTracking();
             }
+            // Если открыт popup - просто обновляем переменную, но продолжаем
         });
-        
+
         window.addEventListener('focus', () => {
-            console.log('🔊 Окно получило фокус, проверяем состояние');
+            console.log('🔊 Окно получило фокус');
             windowHasFocus = true;
+            // При получении фокуса проверяем состояние видео
             setTimeout(checkVideoState, 500);
         });
         
@@ -467,7 +468,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             }
             sendResponse({ success: true });
             break;
-    }
+
+        case 'POPUP_STATUS':
+            console.log('📊 Получен статус popup:', message.isOpen ? 'открыт' : 'закрыт');
+            popupOpen = message.isOpen;
+            
+            // Если popup открыт, но окно потеряло фокус - продолжаем отслеживание
+            if (popupOpen && !windowHasFocus) {
+                console.log('📊 Popup открыт, продолжаем отслеживание');
+                // Видео продолжает играть, просто фокус на popup
+                if (isTracking) {
+                    // Не делаем ничего - продолжаем отслеживание
+                }
+            } else if (!popupOpen && !windowHasFocus) {
+                // Popup закрыт и окно не в фокусе - возможно видео на паузе
+                checkVideoState();
+            }
+            sendResponse({ success: true });
+            break;
+            }
     
     return true;
 });

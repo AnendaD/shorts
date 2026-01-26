@@ -356,7 +356,7 @@ function showWarningIfNeeded(totalSeconds, dailyLimit) {
         showNotification('⚠️ Вы использовали более 70% лимита');
         window.warning70Shown = true;
     } else if (percentage > 50 && !window.warning50Shown) {
-        showNotification('📊 Вы на полпути к лимиту');
+        showNotification('📊 Лимит наполовину исчерпан');
         window.warning50Shown = true;
     }
 }
