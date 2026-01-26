@@ -309,17 +309,6 @@ button {
     100% { transform: scale(1); }
 }
 
-/* ИСПРАВЛЕНО: Убрана анимация growBar для chart-bar при обновлениях */
-.chart-bar {
-    animation: growBar 0.8s ease-out;
-    transform-origin: bottom;
-}
-
-@keyframes growBar {
-    from { transform: scaleY(0); }
-    to { transform: scaleY(1); }
-}
-
 /* Индикатор активности */
 .active-indicator {
     width: 8px;

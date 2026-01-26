@@ -1,6 +1,3 @@
-console.log('=== DEBUG: Отслеживание редиректов ===');
-let redirectLog = [];
-
 function logRedirect(tabId, reason, fromFunction) {
     const entry = {
         time: new Date().toISOString(),
@@ -12,11 +9,11 @@ function logRedirect(tabId, reason, fromFunction) {
     redirectLog.push(entry);
     console.log('📝 Лог редиректа:', entry);
 }
-// Хранилище активной сессии (только одна!)
+// Хранилище активной сессии
 let activeSession = null;
 let activeTabId = null;
 
-// НОВОЕ: Отслеживание открытия popup
+// Отслеживание открытия popup
 let popupOpen = false;
 let popupWindowId = null;
 
@@ -30,7 +27,6 @@ chrome.runtime.onInstalled.addListener(() => {
                 userSettings: {
                     dailyLimit: 30 * 60,
                     redirectVideoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-                    isPremium: false
                 }
             });
             console.log('🆕 Созданы настройки по умолчанию');
@@ -199,12 +195,6 @@ function handleShortsHeartbeat(message, tabId, sendResponse) {
                 } else {
                     updateStats(timeIncrement);
                     session.lastSavedTime = currentTimeSpent;
-                    
-                    // console.log('💓 Хартбит от вкладки', tabId, {
-                    //     currentTimeSpent: currentTimeSpent,
-                    //     increment: timeIncrement,
-                    //     newDailyTime: newDailyTime
-                    // });
                 }
             }
             
@@ -287,10 +277,9 @@ function updateStats(timeSpent) {
 }
 
 function handleLimitExceeded(redirectUrl, tabId) {
-    logRedirect(tabId, 'limit_exceeded', 'handleLimitExceeded');
     console.log('🚫 Лимит исчерпан, перенаправляем вкладку', tabId);
     
-    // ИСПРАВЛЕНО: Редиректим только указанную вкладку
+    // Редиректим только указанную вкладку
     chrome.tabs.get(tabId, (tab) => {
         if (chrome.runtime.lastError) {
             console.log('Вкладка уже закрыта');
@@ -380,7 +369,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     }
 });
 
-// НОВОЕ: Отслеживание закрытия вкладки
+// Отслеживание закрытия вкладки
 chrome.tabs.onRemoved.addListener((tabId) => {
     if (activeTabId === tabId && activeSession) {
         const timeSpent = Math.floor((Date.now() - activeSession.startTime) / 1000);
@@ -396,9 +385,8 @@ chrome.tabs.onRemoved.addListener((tabId) => {
     }
 });
 
-// НОВОЕ: Отслеживание смены активной вкладки (ИСПРАВЛЕННОЕ)
+// Отслеживание смены активной вкладки
 chrome.tabs.onActivated.addListener((activeInfo) => {
-    console.log('👁️ Активирована вкладка', activeInfo.tabId);
     
     chrome.tabs.get(activeInfo.tabId, (tab) => {
         if (chrome.runtime.lastError || !tab.url) return;
@@ -457,7 +445,7 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
     });
 });
 
-// НОВОЕ: Отслеживание изменений окна (сворачивание/разворачивание) - ИСПРАВЛЕННОЕ
+// Отслеживание изменений окна (сворачивание/разворачивание)
 chrome.windows.onFocusChanged.addListener((windowId) => {
     if (windowId === chrome.windows.WINDOW_ID_NONE) {
         console.log('🪟 Окно Chrome свернуто или потеряло фокус');

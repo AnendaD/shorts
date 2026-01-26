@@ -8,7 +8,7 @@ let redirectUrl = null;
 let lastProgressValue = -1;
 let lastProgressUpdate = Date.now();
 let progressStuckTimer = null;
-let windowHasFocus = true; // Добавляем флаг фокуса окна
+let windowHasFocus = true; 
 
 // Получаем ID вкладки
 chrome.runtime.sendMessage({ type: 'GET_TAB_ID' }, (response) => {
@@ -71,10 +71,9 @@ function isVideoPlaying() {
     const timeSinceLastUpdate = now - lastProgressUpdate;
     
     // Видео считается играющим, если:
-    // 1. Прогресс между 1% и 99%
-    // 2. И последнее обновление было меньше 1.5 секунд назад
-    // 3. Окно в фокусе
-    if (currentValue > 0 && currentValue < 99 && timeSinceLastUpdate < 1500 && windowHasFocus) {
+    // 1. И последнее обновление было меньше 1.5 секунд назад
+    // 2. Окно в фокусе
+    if ( timeSinceLastUpdate < 1500 && windowHasFocus) {
         return true;
     }
     
@@ -225,8 +224,7 @@ function checkVideoState() {
     }
     
     const videoPlaying = isVideoPlaying();
-    console.log('🔍 Проверка: на шортсах, видео играет?', videoPlaying, 'отслеживаем?', isTracking, 'окно в фокусе?', windowHasFocus);
-    
+
     // Если видео играет и мы еще не отслеживаем
     if (videoPlaying && !isTracking) {
         console.log('▶️ Видео играет, начинаем отслеживание');
@@ -277,7 +275,6 @@ function setupProgressObserver() {
             mutations.forEach(mutation => {
                 if (mutation.type === 'attributes' && mutation.attributeName === 'aria-valuenow') {
                     const newValue = parseInt(mutation.target.getAttribute('aria-valuenow') || '0');
-                    console.log('🔄 Изменен прогресс:', newValue, '%');
                     checkVideoState();
                 }
             });

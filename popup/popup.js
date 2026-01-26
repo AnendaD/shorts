@@ -307,11 +307,8 @@ function updateChart(history) {
         bar.style.transition = 'height 0.5s ease';
         bar.style.marginBottom = '5px';
         
-        // Анимация появления
-        setTimeout(() => {
-            const height = (day.timeSpent / maxTime) * 120;
-            bar.style.height = `${height}px`;
-        }, index * 100);
+        const height = (day.timeSpent / maxTime) * 120;
+        bar.style.height = `${height}px`;
         
         // Подсказка при наведении
         const minutes = Math.floor(day.timeSpent / 60);
