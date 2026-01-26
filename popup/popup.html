@@ -10,7 +10,7 @@
     
     <div class="stats">
       <div class="stat-item">
-         <span class="stat-label">Сегодня:</span>
+        <span class="stat-label">Сегодня:</span>
         <span id="todayTime" class="stat-value">0м</span>
         <span id="activeIndicator" class="active-indicator" style="display: none;"></span>
       </div>
@@ -18,13 +18,30 @@
         <div id="progressBar" class="progress-bar"></div>
       </div>
       <div class="limit-info">
-        Лимит: <span id="dailyLimit">30</span> минут
+        Лимит: <span id="dailyLimit">30</span> м
       </div>
     </div>
     
+    <div class="stats extended-stats">
+        <h3>Общая статистика</h3>
+        <div class="stat-row">
+            <div class="stat-item">
+                <span class="stat-label">За 7 дней:</span>
+                <span id="weekTime" class="stat-value">0ч</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">За 30 дней:</span>
+                <span id="monthTime" class="stat-value">0ч</span>
+            </div>
+        </div>
+    </div>
+
     <div class="history">
       <h3>Недельная статистика</h3>
-      <div id="chart" class="chart"></div>
+      <div id="chartContainer" class="bars-container">
+        <!-- График будет создан динамически -->
+      </div>
+      <div id="dayLabels" class="chart-labels"></div>
     </div>
     
     <div class="actions">
@@ -32,7 +49,6 @@
       <button id="resetToday">Сбросить сегодня</button>
     </div>
     
-    <div class="version">Free Version</div>
   </div>
   
   <script src="popup.js"></script>

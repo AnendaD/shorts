@@ -220,56 +220,6 @@ input[type="range"]::-webkit-slider-thumb {
     margin-top: 10px;
 }
 
-.premium-card {
-    background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
-    border-radius: 20px;
-    padding: 30px;
-    text-align: center;
-}
-
-.premium-header {
-    margin-bottom: 25px;
-}
-
-.premium-badge {
-    display: inline-block;
-    background: white;
-    color: #f6d365;
-    padding: 8px 20px;
-    border-radius: 20px;
-    font-weight: bold;
-    margin-bottom: 15px;
-}
-
-.premium-features {
-    list-style: none;
-    text-align: left;
-    margin: 30px 0;
-}
-
-.premium-features li {
-    padding: 12px 0;
-    font-size: 1.1em;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.3);
-}
-
-.premium-features li:last-child {
-    border-bottom: none;
-}
-
-.upgrade-btn {
-    background: white;
-    color: #f6d365;
-    width: 100%;
-    font-size: 1.2em;
-    padding: 20px;
-}
-
-.upgrade-btn:hover {
-    background: #f8f9fa;
-    transform: scale(1.02);
-}
-
 .footer {
     background: #f8f9fa;
     padding: 30px 40px;

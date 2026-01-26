@@ -1,3 +1,8 @@
+let lastUpdateTime = 0;
+const UPDATE_INTERVAL_MS = 10 * 60 * 1000; // 10 минут
+let lastChartUpdate = 0;
+const CHART_UPDATE_INTERVAL_MS = 10 * 60 * 1000; // 10 минут для графика
+
 document.addEventListener('DOMContentLoaded', () => {
     console.log('Popup loaded');
     
@@ -67,9 +72,16 @@ document.addEventListener('DOMContentLoaded', () => {
 let updateInterval = null;
 let currentStats = {
     dailyTime: 0,
-    dailyLimit: 30 * 60
+    dailyLimit: 30 * 60,
+    historyLength: 0
 };
 let isInitialized = false;
+let cachedExtendedStats = {
+    weekTime: 0,
+    monthTime: 0,
+    weekHistoryLength: 0,
+    monthHistoryLength: 0
+};
 
 function initializePopup() {
     // Добавляем иконку в заголовок
@@ -81,11 +93,11 @@ function initializePopup() {
     // Запрашиваем начальные данные - всегда принудительное обновление при инициализации
     updateStats(true);
     
-    // ИСПРАВЛЕНО: Запускаем периодическое обновление каждую секунду
+    // Запускаем периодическое обновление каждые 10 минут
     if (updateInterval) clearInterval(updateInterval);
     updateInterval = setInterval(() => {
         updateStats(true);
-    }, 1000); // Изменено с 1500 на 1000
+    }, UPDATE_INTERVAL_MS);
     
     // Обновляем при возвращении на вкладку
     document.addEventListener('visibilitychange', () => {
@@ -101,28 +113,59 @@ function initializePopup() {
 }
 
 function updateStats(forceUpdate = false) {
+    // Проверяем время с последнего обновления
+    const now = Date.now();
+    const timeSinceLastUpdate = now - lastUpdateTime;
+    
+    // Если не принудительное обновление и прошло меньше 10 минут - пропускаем
+    if (!forceUpdate && timeSinceLastUpdate < UPDATE_INTERVAL_MS) {
+        console.log('Skipping update, too soon:', timeSinceLastUpdate, 'ms');
+        return;
+    }
+    
     chrome.storage.local.get(['stats', 'userSettings'], (result) => {
         if (chrome.runtime.lastError) {
             console.error('Storage error:', chrome.runtime.lastError);
             return;
         }
         
-        const stats = result.stats || { dailyTime: 0, lastUpdated: Date.now() };
+        const stats = result.stats || { dailyTime: 0, lastUpdated: Date.now(), history: [] };
         const settings = result.userSettings || { dailyLimit: 30 * 60 };
+        
+        // Обновляем время последнего обновления
+        lastUpdateTime = now;
         
         // Сохраняем текущие значения для сравнения
         const oldTime = currentStats.dailyTime;
         const oldLimit = currentStats.dailyLimit;
+        const oldHistoryLength = currentStats.historyLength || 0;
+        
         currentStats.dailyTime = stats.dailyTime || 0;
         currentStats.dailyLimit = settings.dailyLimit || 30 * 60;
+        currentStats.historyLength = stats.history?.length || 0;
+        
+        console.log('Storage data:', {
+            dailyTime: stats.dailyTime,
+            historyLength: stats.history?.length,
+            forceUpdate: forceUpdate,
+            historyChanged: oldHistoryLength !== currentStats.historyLength
+        });
         
         // Обновляем если данные изменились, лимит изменился, принудительное обновление или первая инициализация
-        if (forceUpdate || oldTime !== currentStats.dailyTime || oldLimit !== currentStats.dailyLimit || !isInitialized) {
-            console.log('Updating UI:', {
-                dailyTime: currentStats.dailyTime,
-                dailyLimit: currentStats.dailyLimit,
-                forceUpdate: forceUpdate
+        if (forceUpdate || 
+            oldTime !== currentStats.dailyTime || 
+            oldLimit !== currentStats.dailyLimit || 
+            oldHistoryLength !== currentStats.historyLength || 
+            !isInitialized) {
+            
+            console.log('Updating UI (reason):', {
+                timeChanged: oldTime !== currentStats.dailyTime,
+                limitChanged: oldLimit !== currentStats.dailyLimit,
+                historyChanged: oldHistoryLength !== currentStats.historyLength,
+                forceUpdate: forceUpdate,
+                notInitialized: !isInitialized
             });
+            
             updateUI(stats, settings);
             isInitialized = true;
         }
@@ -132,24 +175,20 @@ function updateStats(forceUpdate = false) {
 function updateStatsFromMessage(message) {
     if (message.dailyTime !== undefined) {
         currentStats.dailyTime = message.dailyTime;
-        updateUI({
-            dailyTime: message.dailyTime,
-            lastUpdated: Date.now()
-        }, {
-            dailyLimit: currentStats.dailyLimit
-        });
+        // Принудительное обновление при сообщении
+        updateStats(true);
     }
-}
-
-function updateLiveTime(timeSpent) {
-    requestStatsUpdate();
 }
 
 function updateUI(stats, settings) {
     const totalSeconds = stats.dailyTime || 0;
     const dailyLimit = settings.dailyLimit || 30 * 60;
     
-    console.log('updateUI called:', { totalSeconds, dailyLimit });
+    console.log('updateUI called:', { 
+        totalSeconds, 
+        dailyLimit,
+        historyLength: stats.history?.length || 0 
+    });
     
     const activeIndicator = document.getElementById('activeIndicator');
     if (activeIndicator) {
@@ -158,17 +197,76 @@ function updateUI(stats, settings) {
         activeIndicator.style.background = timeSinceUpdate < 5000 ? '#4CAF50' : 
                                          timeSinceUpdate < 10000 ? '#FFA500' : '#FF4757';
     }
+    
     // Форматируем время
     updateTimeDisplay(totalSeconds);
     
-    // Обновляем прогресс бар - ВСЕГДА, даже если значение 0
+    // Обновляем прогресс бар
     updateProgressBar(totalSeconds, dailyLimit);
     
-    // Обновляем график
-    updateChart(stats.history || []);
+    // Обновляем расширенную статистику
+    updateExtendedStats(stats.history || []);
+    
+    // Обновляем столбчатую диаграмму (с учетом интервала в 10 минут)
+    const now = Date.now();
+    if (now - lastChartUpdate >= CHART_UPDATE_INTERVAL_MS || !isInitialized) {
+        updateChart(stats.history || [], dailyLimit);
+        lastChartUpdate = now;
+    }
     
     // Показываем предупреждение
     showWarningIfNeeded(totalSeconds, dailyLimit);
+}
+
+function updateExtendedStats(history) {
+    // Рассчитываем время за 7 дней
+    const last7Days = history.slice(-7);
+    const weekSeconds = last7Days.reduce((sum, day) => sum + (day.timeSpent || 0), 0);
+    
+    // Рассчитываем время за 30 дней
+    const last30Days = history.slice(-30);
+    const monthSeconds = last30Days.reduce((sum, day) => sum + (day.timeSpent || 0), 0);
+    
+    // Кэшируем значения чтобы избежать мигания
+    const shouldUpdate = 
+        weekSeconds !== cachedExtendedStats.weekTime ||
+        monthSeconds !== cachedExtendedStats.monthTime ||
+        last7Days.length !== cachedExtendedStats.weekHistoryLength ||
+        last30Days.length !== cachedExtendedStats.monthHistoryLength;
+    
+    if (shouldUpdate) {
+        const weekHours = Math.floor(weekSeconds / 3600);
+        const weekMinutes = Math.floor((weekSeconds % 3600) / 60);
+        
+        const monthHours = Math.floor(monthSeconds / 3600);
+        const monthMinutes = Math.floor((monthSeconds % 3600) / 60);
+        
+        // Обновляем отображение
+        const weekElement = document.getElementById('weekTime');
+        const monthElement = document.getElementById('monthTime');
+        
+        if (weekElement) {
+            weekElement.textContent = weekHours > 0 ? 
+                `${weekHours}ч ${weekMinutes}м` : 
+                weekMinutes > 0 ? `${weekMinutes}м` : '0м';
+        }
+        
+        if (monthElement) {
+            monthElement.textContent = monthHours > 0 ? 
+                `${monthHours}ч ${monthMinutes}м` : 
+                monthMinutes > 0 ? `${monthMinutes}м` : '0м';
+        }
+        
+        // Обновляем кэш
+        cachedExtendedStats = {
+            weekTime: weekSeconds,
+            monthTime: monthSeconds,
+            weekHistoryLength: last7Days.length,
+            monthHistoryLength: last30Days.length
+        };
+        
+        console.log('Extended stats updated:', cachedExtendedStats);
+    }
 }
 
 function updateTimeDisplay(totalSeconds) {
@@ -263,99 +361,177 @@ function updateProgressBar(totalSeconds, dailyLimit) {
     }
 }
 
-function updateChart(history) {
-    const chart = document.getElementById('chart');
-    if (!chart) return;
+function updateChart(history, dailyLimit = 30 * 60) {
+    const chartContainer = document.getElementById('chartContainer');
+    const dayLabelsContainer = document.getElementById('dayLabels');
     
-    // Безопасная очистка содержимого
-    while (chart.firstChild) {
-        chart.removeChild(chart.firstChild);
+    if (!chartContainer || !dayLabelsContainer) {
+        console.error('Chart containers not found!');
+        return;
     }
     
-    // Берем последние 7 дней
-    const last7Days = history.slice(-7);
+    // Очищаем график и подписи
+    chartContainer.innerHTML = '';
+    dayLabelsContainer.innerHTML = '';
+    
+    // Получаем данные за последние 7 дней
+    const last7Days = getLast7DaysData(history);
     
     if (last7Days.length === 0) {
         const noDataDiv = document.createElement('div');
         noDataDiv.className = 'no-data';
-        noDataDiv.style.cssText = 'text-align: center; color: #666; padding: 20px;';
         noDataDiv.textContent = 'Нет данных за последние 7 дней';
-        chart.appendChild(noDataDiv);
+        chartContainer.appendChild(noDataDiv);
         return;
     }
     
     // Находим максимальное значение для масштабирования
-    const maxTime = Math.max(...last7Days.map(h => h.timeSpent), 1);
+    const maxTime = Math.max(...last7Days.map(d => d.timeSpent), dailyLimit, 1);
     
-    // Создаем бары для каждого дня
+    // Создаем метки на оси Y
+    createYAxisMarkers(chartContainer, maxTime);
+    
+    // Создаем столбцы
     last7Days.forEach((day, index) => {
+        // Контейнер для столбца
         const barContainer = document.createElement('div');
-        barContainer.className = 'chart-bar-container';
-        barContainer.style.display = 'flex';
-        barContainer.style.flexDirection = 'column';
-        barContainer.style.alignItems = 'center';
-        barContainer.style.width = '40px';
+        barContainer.className = 'bar-container';
         
+        // Столбец
         const bar = document.createElement('div');
-        bar.className = 'chart-bar';
-        bar.style.width = '20px';
-        bar.style.minHeight = '5px';
-        bar.style.background = index === last7Days.length - 1 ? 
-            'linear-gradient(to top, #667eea, #764ba2)' : 
-            'linear-gradient(to top, #a78bfa, #8b5cf6)';
-        bar.style.borderRadius = '10px 10px 0 0';
-        bar.style.transition = 'height 0.5s ease';
-        bar.style.marginBottom = '5px';
+        bar.className = 'bar';
         
-        const height = (day.timeSpent / maxTime) * 120;
-        bar.style.height = `${height}px`;
+        // Высота столбца в процентах
+        const heightPercent = (day.timeSpent / maxTime) * 100;
+        bar.style.height = `${heightPercent}%`;
         
         // Подсказка при наведении
-        const minutes = Math.floor(day.timeSpent / 60);
-        const seconds = day.timeSpent % 60;
-        bar.title = `${minutes}м ${seconds}с`;
-        
-        const label = document.createElement('div');
-        label.className = 'chart-label';
-        label.style.fontSize = '0.8em';
-        label.style.color = '#666';
-        label.style.fontWeight = '500';
-        
-        // Форматируем дату
-        const date = new Date(day.date);
-        const today = new Date();
-        const yesterday = new Date(today);
-        yesterday.setDate(yesterday.getDate() - 1);
-        
-        let labelText;
-        if (date.toDateString() === today.toDateString()) {
-            labelText = 'Сегодня';
-        } else if (date.toDateString() === yesterday.toDateString()) {
-            labelText = 'Вчера';
-        } else {
-            const dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
-            labelText = dayNames[date.getDay()];
-        }
-        
-        label.textContent = labelText;
+        const tooltip = document.createElement('div');
+        tooltip.className = 'bar-tooltip';
+        tooltip.textContent = formatTime(day.timeSpent);
         
         barContainer.appendChild(bar);
-        barContainer.appendChild(label);
-        chart.appendChild(barContainer);
+        barContainer.appendChild(tooltip);
+        chartContainer.appendChild(barContainer);
+        
+        // Создаем подпись дня
+        const dayLabel = document.createElement('div');
+        dayLabel.className = 'day-label';
+        dayLabel.textContent = day.dayNumber;
+        dayLabelsContainer.appendChild(dayLabel);
     });
+}
+
+function getLast7DaysData(history) {
+    const today = new Date();
+    const result = [];
+    
+    // Создаем массив последних 7 дней включая сегодня
+    for (let i = 6; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+        const dayNumber = date.getDate();
+        
+        // Ищем данные для этой даты
+        const dayData = history.find(h => h.date === dateStr);
+        
+        result.push({
+            date: dateStr,
+            dayNumber: dayNumber,
+            timeSpent: dayData ? dayData.timeSpent : 0
+        });
+    }
+    
+    return result;
+}
+
+function createYAxisMarkers(container, maxTime) {
+    // Рассчитываем шаги для меток
+    let step;
+    let markerCount;
+    
+    if (maxTime <= 60) { // До 1 минуты
+        step = 15; // 15 секунд
+        markerCount = Math.ceil(maxTime / step);
+    } else if (maxTime <= 300) { // До 5 минут
+        step = 60; // 1 минута
+        markerCount = Math.ceil(maxTime / step);
+    } else if (maxTime <= 1800) { // До 30 минут
+        step = 300; // 5 минут
+        markerCount = Math.ceil(maxTime / step);
+    } else { // Более 30 минут
+        step = 600; // 10 минут
+        markerCount = Math.ceil(maxTime / step);
+    }
+    
+    // Ограничиваем количество меток
+    markerCount = Math.min(markerCount, 5);
+    
+    // Создаем контейнер для меток оси Y
+    const yAxisMarkers = document.createElement('div');
+    yAxisMarkers.className = 'y-axis-markers';
+    
+    // Добавляем метки
+    for (let i = 0; i <= markerCount; i++) {
+        const timeValue = i * step;
+        if (timeValue > maxTime) continue;
+        
+        const markerLine = document.createElement('div');
+        markerLine.className = 'y-marker-line';
+        const bottomPercent = (timeValue / maxTime) * 100;
+        markerLine.style.cssText = `
+            bottom: ${bottomPercent}%;
+            background: ${i === 0 ? 'transparent' : 'rgba(0, 0, 0, 0.1)'};
+        `;
+        yAxisMarkers.appendChild(markerLine);
+        
+        const markerLabel = document.createElement('div');
+        markerLabel.className = 'y-marker-label';
+        markerLabel.style.cssText = `
+            bottom: ${bottomPercent}%;
+        `;
+        markerLabel.textContent = formatShortTime(timeValue);
+        yAxisMarkers.appendChild(markerLabel);
+    }
+    
+    container.appendChild(yAxisMarkers);
+}
+
+function formatShortTime(seconds) {
+    if (seconds < 60) {
+        return `${seconds}с`;
+    } else {
+        const minutes = Math.floor(seconds / 60);
+        return `${minutes}м`;
+    }
+}
+
+function formatTime(seconds) {
+    if (seconds < 60) {
+        return `${seconds} секунд`;
+    } else if (seconds < 3600) {
+        const minutes = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return secs > 0 ? `${minutes}м ${secs}с` : `${minutes} минут`;
+    } else {
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        return minutes > 0 ? `${hours}ч ${minutes}м` : `${hours} часов`;
+    }
 }
 
 function showWarningIfNeeded(totalSeconds, dailyLimit) {
     const percentage = (totalSeconds / dailyLimit) * 100;
     
     // Показываем предупреждение только один раз за сессию для каждого уровня
-    if (percentage > 90 && !window.warning90Shown) {
+    if (percentage > 90 && percentage < 100 && !window.warning90Shown) {
         showNotification('🚨 Внимание! Лимит Shorts почти исчерпан!');
         window.warning90Shown = true;
-    } else if (percentage > 70 && !window.warning70Shown) {
+    } else if (percentage > 70 && percentage <90 && !window.warning70Shown) {
         showNotification('⚠️ Вы использовали более 70% лимита');
         window.warning70Shown = true;
-    } else if (percentage > 50 && !window.warning50Shown) {
+    } else if (percentage > 50 && percentage <70 && !window.warning50Shown) {
         showNotification('📊 Лимит наполовину исчерпан');
         window.warning50Shown = true;
     }
@@ -377,6 +553,7 @@ function requestStatsUpdate() {
             // Обновляем текущие значения
             currentStats.dailyTime = response.stats.dailyTime || 0;
             currentStats.dailyLimit = response.settings?.dailyLimit || 30 * 60;
+            currentStats.historyLength = response.stats.history?.length || 0;
             
             updateUI(response.stats, response.settings || { dailyLimit: 30 * 60 });
         } else {

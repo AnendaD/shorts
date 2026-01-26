@@ -36,6 +36,74 @@ h1 {
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
 }
 
+.extended-stats {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    margin: 20px 0;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.extended-stats h3 {
+    color: #667eea;
+    margin-bottom: 15px;
+    font-size: 1.2em;
+    text-align: center;
+}
+
+.extended-stats .stat-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 15px;
+    margin-top: 10px;
+}
+
+.extended-stats .stat-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 10px;
+    border-radius: 8px;
+    background: rgba(102, 126, 234, 0.05);
+    transition: background 0.3s ease;
+}
+
+.extended-stats .stat-item:hover {
+    background: rgba(102, 126, 234, 0.1);
+}
+
+.extended-stats .stat-label {
+    font-size: 0.9em;
+    color: white;
+    margin-bottom: 8px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.extended-stats .stat-value {
+    font-size: 1.3em;
+    font-weight: bold;
+    color: #667eea;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+}
+
+.stat-row .stat-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 0;
+}
+
 .stat-item {
     display: flex;
     justify-content: space-between;
@@ -73,9 +141,15 @@ h1 {
 
 .limit-info {
     text-align: center;
-    color: #666;
-    font-size: 0.9em;
+    color: #000000;
+    font-size: 1.1em;
     margin-top: 10px;
+}
+
+#dailyLimit {
+    font-size: 1.1em;           /* Делаем чуть больше чем обычный текст */
+    color: white;           /* Такой же цвет как в общей статистике */
+    font-weight: bold;        /* Жирный шрифт */
 }
 
 .history {
@@ -93,33 +167,77 @@ h1 {
 }
 
 .chart {
+    position: relative;
+    height: 180px;
+    padding: 10px 25px 25px 25px;
+    border-bottom: 2px solid #e0e0e0;
+    overflow: hidden;
+}
+
+.bars-container {
+    position: relative;
+    width: 100%;
+    height: 180px;
     display: flex;
     align-items: flex-end;
     justify-content: space-around;
-    height: 150px;
-    padding: 10px 0;
+    padding: 10px 5px;
     border-bottom: 2px solid #e0e0e0;
 }
 
-.chart-bar-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    width: 40px;
+.chart-marker-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: rgba(0, 0, 0, 0.1);
+    z-index: 0;
 }
 
-.chart-bar {
-    width: 20px;
-    background: linear-gradient(to top, #667eea, #764ba2);
-    border-radius: 10px 10px 0 0;
-    transition: height 0.5s ease;
-    margin-bottom: 5px;
+.chart-marker-label {
+    position: absolute;
+    font-size: 10px;
+    color: #666;
+    white-space: nowrap;
+}
+
+.chart-bar:hover {
+    transform: scaleX(1.1);
+    transition: transform 0.2s ease;
+}
+
+.chart-bar:hover::after {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    border: 2px solid rgba(102, 126, 234, 0.3);
+    border-radius: 12px 12px 0 0;
+    pointer-events: none;
 }
 
 .chart-label {
     font-size: 0.8em;
     color: #666;
     font-weight: 500;
+}
+
+.limit-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: repeating-linear-gradient(
+        90deg,
+        #FF4757,
+        #FF4757 5px,
+        transparent 5px,
+        transparent 10px
+    );
+    z-index: 1;
+    pointer-events: none;
 }
 
 .actions {
@@ -174,18 +292,14 @@ button {
     font-size: 0.85em;
 }
 
-/* ИСПРАВЛЕНО: Убраны анимации пульсации */
 .progress-bar.warning {
     background: linear-gradient(90deg, #FFA500, #FF6347);
-    /* animation: pulse 1s infinite; УБРАНО */
 }
 
 .progress-bar.danger {
     background: linear-gradient(90deg, #FF0000, #FF6347);
-    /* animation: pulse 0.5s infinite; УБРАНО */
 }
 
-/* Тема для премиум-версии */
 .premium-theme .container {
     background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
     color: #333;
@@ -208,7 +322,6 @@ button {
     font-weight: bold;
 }
 
-/* Уведомления в попапе */
 .notification {
     position: fixed;
     top: 10px;
@@ -233,7 +346,6 @@ button {
     }
 }
 
-/* Темная тема */
 @media (prefers-color-scheme: dark) {
     body {
         background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%);
@@ -244,21 +356,44 @@ button {
         color: #e2e8f0;
     }
     
-    .stats, .history {
+    .stats, .history, .extended-stats {
         background: #4a5568;
         color: #e2e8f0;
     }
     
-    .stat-label, .limit-info, .chart-label {
+    .stat-label, .limit-info, .chart-label, .chart-marker-label {
         color: #cbd5e0;
+    }
+
+    #dailyLimit {
+        color:#cbd5e0;       /* Такой же цвет как в общей статистике для темной темы */
     }
     
     .progress-container {
         background: #718096;
     }
+    
+    .stat-row .stat-value {
+        color: #a78bfa;
+    }
+    
+    .extended-stats .stat-item {
+        background: rgba(255, 255, 255, 0.05);
+    }
+    
+    .extended-stats .stat-item:hover {
+        background: rgba(255, 255, 255, 0.1);
+    }
+    
+    .extended-stats .stat-label {
+        color: #cbd5e0;
+    }
+    
+    .extended-stats .stat-value {
+        color: #a78bfa;
+    }
 }
 
-/* Адаптивность */
 @media (max-width: 400px) {
     body {
         width: 320px;
@@ -275,6 +410,20 @@ button {
     .actions {
         grid-template-columns: 1fr;
     }
+    
+    .stat-row {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .extended-stats .stat-row {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .extended-stats .stat-item {
+        width: 100%;
+    }
 }
 
 .progress-bar {
@@ -282,7 +431,6 @@ button {
                 background-color 0.5s ease;
 }
 
-/* Анимация появления элементов */
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
@@ -298,7 +446,6 @@ button {
 .container > *:nth-child(3) { animation-delay: 0.3s; }
 .container > *:nth-child(4) { animation-delay: 0.4s; }
 
-/* Анимация обновления времени */
 .time-update {
     animation: pulseTime 0.3s ease;
 }
@@ -309,7 +456,6 @@ button {
     100% { transform: scale(1); }
 }
 
-/* Индикатор активности */
 .active-indicator {
     width: 8px;
     height: 8px;
@@ -323,4 +469,251 @@ button {
 @keyframes blink {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.3; }
+}
+
+.line-chart-container {
+    position: relative;
+    height: 180px;
+    padding: 10px 35px 35px 35px;
+    overflow: visible;
+}
+
+.line-chart {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.grid-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: rgba(0, 0, 0, 0.1);
+    z-index: 0;
+}
+
+.grid-label {
+    position: absolute;
+    font-size: 10px;
+    color: #666;
+    white-space: nowrap;
+}
+
+.data-line {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2;
+}
+
+.x-axis-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 15px;
+    padding: 0 5px;
+    position: relative;
+    z-index: 10;
+}
+
+.x-axis-label {
+    font-size: 0.8em;
+    color: #666;
+    font-weight: 500;
+    text-align: center;
+    flex: 1;
+    padding: 2px 0;
+}
+
+.no-data {
+    text-align: center;
+    color: #666;
+    padding: 60px 20px;
+    width: 100%;
+    font-size: 0.95em;
+}
+
+.line-path {
+    fill: none;
+    stroke: #667eea;
+    stroke-width: 2px;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.area-path {
+    fill: rgba(102, 126, 234, 0.1);
+    stroke: none;
+}
+
+/* ИСПРАВЛЕННЫЕ СТИЛИ ДЛЯ СТОЛБЧАТОЙ ДИАГРАММЫ */
+.bars-container {
+    position: relative;
+    width: 100%;
+    height: 180px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-around;
+    padding: 0 5px;
+    border-bottom: 2px solid #e0e0e0;
+}
+
+.bar-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
+    margin: 0 2px;
+    position: relative;
+    justify-content: flex-end;
+}
+
+.bar {
+    width: 80%;
+    min-height: 2px;
+    background: linear-gradient(to top, #667eea, #764ba2);
+    border-radius: 4px 4px 0 0;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    position: relative;
+    margin-bottom: 0;
+}
+
+.bar:hover {
+    transform: scaleX(1.1);
+    background: linear-gradient(to top, #764ba2, #667eea);
+    box-shadow: 0 0 10px rgba(102, 126, 234, 0.3);
+}
+
+.bar-tooltip {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 100;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+    margin-bottom: 5px;
+}
+
+.bar-container:hover .bar-tooltip {
+    opacity: 1;
+    visibility: visible;
+}
+
+.chart-labels {
+    display: flex;
+    justify-content: space-around;
+    margin-top: 10px;
+    padding: 0 5px;
+}
+
+.day-label {
+    font-size: 0.9em;
+    color: #666;
+    font-weight: 500;
+    text-align: center;
+    flex: 1;
+}
+
+/* Стили для меток на оси Y */
+.y-axis-markers {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+}
+
+.y-marker-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.y-marker-label {
+    position: absolute;
+    left: -15px;
+    font-size: 10px;
+    color: #666;
+    transform: translateY(50%);
+}
+
+/* Темная тема для графика */
+@media (prefers-color-scheme: dark) {
+    .bar {
+        background: linear-gradient(to top, #667eea, #a78bfa);
+    }
+    
+    .bar:hover {
+        background: linear-gradient(to top, #a78bfa, #667eea);
+        box-shadow: 0 0 10px rgba(102, 126, 234, 0.5);
+    }
+    
+    .bar-tooltip {
+        background: rgba(0, 0, 0, 0.9);
+    }
+    
+    .day-label {
+        color: #cbd5e0;
+    }
+    
+    .chart-marker-line {
+        background: rgba(255, 255, 255, 0.1);
+    }
+    
+    .chart-marker-label {
+        color: #cbd5e0;
+    }
+    
+    .no-data {
+        color: #cbd5e0;
+    }
+    
+    .y-marker-line {
+        background: rgba(255, 255, 255, 0.1);
+    }
+    
+    .y-marker-label {
+        color: #cbd5e0;
+    }
+}
+
+/* Адаптивность для мобильных */
+@media (max-width: 400px) {
+    .bars-container {
+        height: 150px;
+    }
+    
+    .bar {
+        width: 70%;
+    }
+    
+    .bar-tooltip {
+        font-size: 10px;
+        padding: 3px 6px;
+    }
+    
+    .day-label {
+        font-size: 0.8em;
+    }
+    
+    .no-data {
+        padding: 40px 15px;
+        font-size: 0.85em;
+    }
 }
