@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход - Shorts Limiter</title>
+    <link rel="stylesheet" href="auth.css">
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-header">
+            <h1>🔐 Shorts Limiter</h1>
+            <p class="subtitle">Войдите для синхронизации настроек</p>
+        </div>
+        
+        <div class="auth-tabs">
+            <button class="tab active" data-tab="login">Вход</button>
+            <button class="tab" data-tab="register">Регистрация</button>
+        </div>
+        
+        <div class="auth-content">
+            <!-- Форма входа -->
+            <div id="loginForm" class="form active">
+                <div class="form-group">
+                    <label for="loginEmail">Email</label>
+                    <input type="email" id="loginEmail" placeholder="ваш@email.com">
+                </div>
+                
+                <div class="form-group">
+                    <label for="loginPassword">Пароль</label>
+                    <input type="password" id="loginPassword" placeholder="••••••••">
+                </div>
+                
+                <div class="form-options">
+                    <label class="checkbox">
+                        <input type="checkbox" id="rememberMe">
+                        <span>Запомнить меня</span>
+                    </label>
+                    <a href="#" class="forgot-password">Забыли пароль?</a>
+                </div>
+                
+                <button id="loginBtn" class="btn btn-primary">Войти</button>
+            </div>
+            
+            <!-- Форма регистрации -->
+            <div id="registerForm" class="form">
+                <div class="form-group">
+                    <label for="registerEmail">Email</label>
+                    <input type="email" id="registerEmail" placeholder="ваш@email.com">
+                </div>
+                
+                <div class="form-group">
+                    <label for="registerPassword">Пароль</label>
+                    <input type="password" id="registerPassword" placeholder="••••••••">
+                </div>
+                
+                <div class="form-group">
+                    <label for="confirmPassword">Подтвердите пароль</label>
+                    <input type="password" id="confirmPassword" placeholder="••••••••">
+                </div>
+                
+                <div class="form-checkbox">
+                    <input type="checkbox" id="acceptTerms">
+                    <label for="acceptTerms">
+                        Я согласен с <a href="#">условиями использования</a>
+                    </label>
+                </div>
+                
+                <button id="registerBtn" class="btn btn-primary">Зарегистрироваться</button>
+            </div>
+        </div>
+        
+        <div class="auth-footer">
+            <p>Или продолжите без входа</p>
+            <button id="skipAuth" class="btn btn-secondary">Пропустить</button>
+        </div>
+        
+        <div id="statusMessage" class="status-message"></div>
+    </div>
+    
+    <!-- Подключаем скрипты -->
+    <script src="auth.js"></script>
+    <script src="auth-ui.js"></script>
+    
+    <!-- Дополнительный скрипт для обработки параметров URL и сообщений -->
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // Проверяем параметр mode из URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const mode = urlParams.get('mode');
+        
+        if (mode === 'register') {
+            // Автоматически переключаем на регистрацию
+            const registerTab = document.querySelector('.tab[data-tab="register"]');
+            if (registerTab) {
+                registerTab.click();
+            }
+        }
+        
+        // После успешной авторизации возвращаемся в popup
+        window.addEventListener('message', (event) => {
+            if (event.data.type === 'AUTH_SUCCESS') {
+                // Закрываем окно авторизации
+                window.close();
+            }
+        });
+    });
+    </script>
+</body>
+</html>

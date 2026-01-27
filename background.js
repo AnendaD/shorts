@@ -126,6 +126,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         case 'IS_POPUP_OPEN':
             sendResponse({ popupOpen: popupOpen });
             return true;
+
+        case 'AUTH_STATUS_CHANGED':
+        // Обновляем статус авторизации
+        chrome.tabs.query({url: "*://*.youtube.com/*"}, (tabs) => {
+            tabs.forEach(tab => {
+                chrome.tabs.sendMessage(tab.id, {
+                    type: 'AUTH_STATUS_CHANGED'
+                }).catch(() => {});
+            });
+        });
+        break;
     }
     
     return true;

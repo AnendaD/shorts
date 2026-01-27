@@ -1,9 +1,21 @@
+let isInitialized = false;
 let lastUpdateTime = 0;
-const UPDATE_INTERVAL_MS = 10 * 60 * 1000; // 10 минут
+const UPDATE_INTERVAL_MS = 10 * 60 * 1000;
 let lastChartUpdate = 0;
-const CHART_UPDATE_INTERVAL_MS = 10 * 60 * 1000; // 10 минут для графика
+const CHART_UPDATE_INTERVAL_MS = 10 * 60 * 1000;
+let currentStats = {
+    dailyTime: 0,
+    dailyLimit: 30 * 60,
+    historyLength: 0
+};
+let cachedExtendedStats = {
+    weekTime: 0,
+    monthTime: 0,
+    weekHistoryLength: 0,
+    monthHistoryLength: 0
+};
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     console.log('Popup loaded');
     
     // Сообщаем background скрипту, что popup открыт
@@ -12,16 +24,19 @@ document.addEventListener('DOMContentLoaded', () => {
         windowId: chrome.windows.WINDOW_ID_CURRENT
     }).catch(() => {});
     
-    // Инициализируем прогресс-бар с нулевым значением сразу
+    // Инициализируем менеджер авторизации
+    await authManager.init();
+
+    // Проверяем статус авторизации и показываем соответствующий интерфейс
+    showAppropriateUI();
+    
+    // Инициализируем прогресс-бар
     const progressBar = document.getElementById('progressBar');
     if (progressBar) {
         progressBar.style.width = '0%';
         progressBar.style.display = 'block';
         progressBar.style.height = '100%';
     }
-    
-    // Инициализация
-    initializePopup();
     
     // Слушаем сообщения из фонового скрипта
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -33,82 +48,234 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
                 
             case 'DAILY_RESET':
-                updateStats(true); // Принудительное обновление
+                updateStats(true);
                 showNotification('🎉 Новый день! Счетчик сброшен.');
+                break;
+                
+            case 'AUTH_STATUS_CHANGED':
+                showAppropriateUI();
                 break;
         }
         return true;
     });
     
-    // Кнопки
+    // Назначаем обработчики кнопок авторизации
+    document.getElementById('signInBtn').addEventListener('click', () => {
+        openAuthPage('login');
+    });
+    
+    document.getElementById('signUpBtn').addEventListener('click', () => {
+        openAuthPage('register');
+    });
+    
+    document.getElementById('skipAuthBtn').addEventListener('click', () => {
+        skipAuthorization();
+    });
+    
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+        logout();
+    });
+    
+    document.getElementById('syncBtn').addEventListener('click', () => {
+        syncData();
+    });
+    
+    // Остальные кнопки (назначаются только если показан основной контент)
     document.getElementById('settingsBtn').addEventListener('click', () => {
         chrome.runtime.openOptionsPage();
     });
     
     document.getElementById('resetToday').addEventListener('click', () => {
         if (confirm('Сбросить статистику за сегодня?')) {
-            chrome.storage.local.get(['stats'], (result) => {
-                const stats = result.stats || {};
-                stats.dailyTime = 0;
-                stats.lastUpdated = Date.now();
-                
-                chrome.storage.local.set({ stats }, () => {
-                    updateStats(true); // Принудительное обновление
-                    showNotification('Статистика сброшена!');
-                    
-                    // Отправляем сообщение фоновому скрипту
-                    chrome.runtime.sendMessage({
-                        type: 'MANUAL_RESET'
-                    });
-                });
-            });
+            resetTodayStats();
         }
     });
     
-    // Запрашиваем обновление у фонового скрипта
+    // Запрашиваем обновление статистики
     requestStatsUpdate();
 });
 
-let updateInterval = null;
-let currentStats = {
-    dailyTime: 0,
-    dailyLimit: 30 * 60,
-    historyLength: 0
-};
-let isInitialized = false;
-let cachedExtendedStats = {
-    weekTime: 0,
-    monthTime: 0,
-    weekHistoryLength: 0,
-    monthHistoryLength: 0
-};
+// Показываем соответствующий интерфейс в зависимости от статуса авторизации
+function showAppropriateUI() {
+    const authSection = document.getElementById('authSection');
+    const mainContent = document.getElementById('mainContent');
+    const userSection = document.getElementById('userSection');
+    const userEmail = document.getElementById('userEmail');
+    const syncStatus = document.getElementById('syncStatus');
+    
+    if (authManager.isLoggedIn) {
+        // Пользователь авторизован
+        authSection.style.display = 'none';
+        mainContent.style.display = 'block';
+        userSection.style.display = 'block';
+        
+        // Показываем email пользователя
+        if (userEmail) {
+            // Получаем email из токена
+            const email = authManager.getUserEmail() || 'Пользователь';
+            userEmail.textContent = email;
+        }
+        
+        // Обновляем статус синхронизации
+        if (syncStatus) {
+            syncStatus.textContent = 'Синхронизировано';
+            syncStatus.className = 'sync-status synced';
+        }
+        
+        console.log('✅ Пользователь авторизован');
+    } else {
+        // Проверяем, пропускал ли пользователь авторизацию ранее
+        chrome.storage.local.get(['auth_skipped'], (result) => {
+            if (result.auth_skipped) {
+                // Пользователь пропустил авторизацию - показываем основной интерфейс
+                authSection.style.display = 'none';
+                mainContent.style.display = 'block';
+                userSection.style.display = 'none';
+                
+                if (syncStatus) {
+                    syncStatus.textContent = 'Локальный режим';
+                    syncStatus.className = 'sync-status';
+                }
+            } else {
+                // Показываем экран авторизации
+                authSection.style.display = 'block';
+                mainContent.style.display = 'none';
+                userSection.style.display = 'none';
+            }
+        });
+    }
+}
 
-function initializePopup() {
-    // Добавляем иконку в заголовок
-    const title = document.querySelector('h1');
-    if (title && !title.textContent.includes('⏱️')) {
-        title.textContent = '⏱️ ' + title.textContent;
+// Обработчик сообщений из auth окна:
+window.addEventListener('message', (event) => {
+    if (event.data.type === 'AUTH_SUCCESS') {
+        console.log('✅ Авторизация успешна из дочернего окна');
+        // Обновляем интерфейс
+        showAppropriateUI();
+        showNotification('Авторизация успешна!');
+    } else if (event.data.type === 'AUTH_SKIPPED') {
+        console.log('⏭️ Авторизация пропущена');
+        chrome.storage.local.set({ auth_skipped: true }, () => {
+            showAppropriateUI();
+            showNotification('Вы можете авторизоваться позже в настройках');
+        });
+    }
+});
+
+function extractEmailFromToken(token) {
+    try {
+        if (!token) return null;
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        return payload.email || null;
+    } catch (error) {
+        console.error('Ошибка декодирования токена:', error);
+        return null;
+    }
+}
+
+function openAuthPage(mode = 'login') {
+    // Открываем страницу авторизации в окне popup
+    chrome.windows.create({
+        url: chrome.runtime.getURL('auth/auth.html') + (mode === 'register' ? '?mode=register' : ''),
+        type: 'popup',
+        width: 400,
+        height: 600
+    });
+}
+
+function skipAuthorization() {
+    chrome.storage.local.set({ auth_skipped: true }, () => {
+        showAppropriateUI();
+        showNotification('Вы можете авторизоваться позже в настройках');
+    });
+}
+
+async function logout() {
+    if (confirm('Вы уверены, что хотите выйти?')) {
+        await authManager.logout();
+        chrome.storage.local.set({ auth_skipped: false }, () => {
+            showAppropriateUI();
+            showNotification('Вы вышли из аккаунта');
+        });
+    }
+}
+
+async function syncData() {
+    const syncBtn = document.getElementById('syncBtn');
+    const syncStatus = document.getElementById('syncStatus');
+    
+    if (!authManager.isLoggedIn) {
+        showNotification('Для синхронизации необходимо авторизоваться', 'error');
+        return;
     }
     
-    // Запрашиваем начальные данные - всегда принудительное обновление при инициализации
-    updateStats(true);
+    // Отключаем кнопку и меняем статус
+    syncBtn.disabled = true;
+    syncBtn.innerHTML = '🔄 Синхронизация...';
+    syncStatus.textContent = 'Синхронизация...';
+    syncStatus.className = 'sync-status syncing';
     
-    // Запускаем периодическое обновление каждые 10 минут
-    if (updateInterval) clearInterval(updateInterval);
-    updateInterval = setInterval(() => {
-        updateStats(true);
-    }, UPDATE_INTERVAL_MS);
-    
-    // Обновляем при возвращении на вкладку
-    document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) {
-            updateStats(true);
+    try {
+        // Получаем локальные данные
+        const result = await new Promise((resolve) => {
+            chrome.storage.local.get(['stats', 'userSettings'], resolve);
+        });
+        
+        // Синхронизируем статистику
+        if (result.stats) {
+            const success = await authManager.syncStats(result.stats);
+            if (success) {
+                console.log('✅ Статистика синхронизирована');
+            }
         }
-    });
-    
-    // Обновляем при фокусе окна
-    window.addEventListener('focus', () => {
-        updateStats(true);
+        
+        // Синхронизируем настройки
+        if (result.userSettings) {
+            const success = await authManager.syncSettings(result.userSettings);
+            if (success) {
+                console.log('✅ Настройки синхронизированы');
+            }
+        }
+        
+        // Меняем статус
+        syncStatus.textContent = 'Синхронизировано';
+        syncStatus.className = 'sync-status synced';
+        showNotification('Данные успешно синхронизированы', 'success');
+        
+    } catch (error) {
+        console.error('❌ Ошибка синхронизации:', error);
+        syncStatus.textContent = 'Ошибка синхронизации';
+        syncStatus.className = 'sync-status error';
+        showNotification('Ошибка синхронизации: ' + error.message, 'error');
+    } finally {
+        // Включаем кнопку обратно
+        syncBtn.disabled = false;
+        syncBtn.innerHTML = '🔄 Синхронизировать';
+    }
+}
+
+function resetTodayStats() {
+    chrome.storage.local.get(['stats'], (result) => {
+        const stats = result.stats || {};
+        stats.dailyTime = 0;
+        stats.lastUpdated = Date.now();
+        
+        chrome.storage.local.set({ stats }, () => {
+            updateStats(true);
+            showNotification('Статистика за сегодня сброшена!');
+            
+            // Отправляем сообщение фоновому скрипту
+            chrome.runtime.sendMessage({
+                type: 'MANUAL_RESET'
+            }).catch(() => {});
+            
+            // Синхронизируем с сервером если авторизованы
+            if (authManager.isLoggedIn) {
+                setTimeout(() => {
+                    syncData().catch(() => {});
+                }, 500);
+            }
+        });
     });
 }
 
@@ -663,6 +830,25 @@ document.addEventListener('visibilitychange', () => {
         }).catch(() => {});
     } else {
         // Сообщаем background скрипту, что popup снова виден
+        chrome.runtime.sendMessage({ 
+            type: 'POPUP_OPENED',
+            windowId: chrome.windows.WINDOW_ID_CURRENT
+        }).catch(() => {});
+    }
+});
+
+window.addEventListener('pagehide', () => {
+    chrome.runtime.sendMessage({ 
+        type: 'POPUP_CLOSED' 
+    }).catch(() => {});
+});
+
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        chrome.runtime.sendMessage({ 
+            type: 'POPUP_CLOSED' 
+        }).catch(() => {});
+    } else {
         chrome.runtime.sendMessage({ 
             type: 'POPUP_OPENED',
             windowId: chrome.windows.WINDOW_ID_CURRENT

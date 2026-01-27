@@ -6,51 +6,92 @@
 </head>
 <body>
   <div class="container">
-    <h1>Shorts Limiter</h1>
-    
-    <div class="stats">
-      <div class="stat-item">
-        <span class="stat-label">Сегодня:</span>
-        <span id="todayTime" class="stat-value">0м</span>
-        <span id="activeIndicator" class="active-indicator" style="display: none;"></span>
-      </div>
-      <div class="progress-container">
-        <div id="progressBar" class="progress-bar"></div>
-      </div>
-      <div class="limit-info">
-        Лимит: <span id="dailyLimit">30</span> м
+    <!-- Блок пользователя (скрыт по умолчанию) -->
+    <div id="userSection" class="user-section" style="display: none;">
+      <div class="user-info">
+        <div class="user-avatar">👤</div>
+        <div class="user-details">
+          <div class="user-email" id="userEmail"></div>
+          <button id="logoutBtn" class="btn-logout">Выйти</button>
+        </div>
       </div>
     </div>
     
-    <div class="stats extended-stats">
+    <!-- Блок авторизации (показываем если не авторизован) -->
+    <div id="authSection" class="auth-section">
+      <div class="auth-header">
+        <h3>🔐 Авторизация</h3>
+        <p class="auth-subtitle">Войдите для синхронизации настроек</p>
+      </div>
+      <div class="auth-buttons">
+        <button id="signInBtn" class="btn-auth btn-primary">
+          <span class="btn-icon">🔑</span>
+          <span class="btn-text">Войти</span>
+        </button>
+        <button id="signUpBtn" class="btn-auth btn-secondary">
+          <span class="btn-icon">📝</span>
+          <span class="btn-text">Регистрация</span>
+        </button>
+      </div>
+      <div class="auth-footer">
+        <button id="skipAuthBtn" class="btn-skip">Продолжить без входа</button>
+      </div>
+    </div>
+    
+    <!-- Основной контент (скрыт если не авторизован или пропущена авторизация) -->
+    <div id="mainContent" class="main-content" style="display: none;">
+      <h1>Shorts Limiter</h1>
+      
+      <div class="stats">
+        <div class="stat-item">
+          <span class="stat-label">Сегодня:</span>
+          <span id="todayTime" class="stat-value">0м</span>
+          <span id="activeIndicator" class="active-indicator" style="display: none;"></span>
+        </div>
+        <div class="progress-container">
+          <div id="progressBar" class="progress-bar"></div>
+        </div>
+        <div class="limit-info">
+          Лимит: <span id="dailyLimit">30</span> м
+        </div>
+      </div>
+      
+      <div class="stats extended-stats">
         <h3>Общая статистика</h3>
         <div class="stat-row">
-            <div class="stat-item">
-                <span class="stat-label">За 7 дней:</span>
-                <span id="weekTime" class="stat-value">0ч</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">За 30 дней:</span>
-                <span id="monthTime" class="stat-value">0ч</span>
-            </div>
+          <div class="stat-item">
+            <span class="stat-label">За 7 дней:</span>
+            <span id="weekTime" class="stat-value">0ч</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">За 30 дней:</span>
+            <span id="monthTime" class="stat-value">0ч</span>
+          </div>
         </div>
-    </div>
-
-    <div class="history">
-      <h3>Недельная статистика</h3>
-      <div id="chartContainer" class="bars-container">
-        <!-- График будет создан динамически -->
       </div>
-      <div id="dayLabels" class="chart-labels"></div>
-    </div>
-    
-    <div class="actions">
-      <button id="settingsBtn">Настройки</button>
-      <button id="resetToday">Сбросить сегодня</button>
+
+      <div class="history">
+        <h3>Недельная статистика</h3>
+        <div id="chartContainer" class="bars-container">
+          <!-- График будет создан динамически -->
+        </div>
+        <div id="dayLabels" class="chart-labels"></div>
+      </div>
+      
+      <div class="actions">
+        <button id="settingsBtn">Настройки</button>
+        <button id="resetToday">Сбросить сегодня</button>
+      </div>
+      
+      <div class="sync-info">
+        <span id="syncStatus" class="sync-status">Локальный режим</span>
+        <button id="syncBtn" class="btn-sync">🔄 Синхронизировать</button>
+      </div>
     </div>
     
   </div>
   
+  <script src="auth.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
