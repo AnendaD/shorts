@@ -44,23 +44,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (result.success) {
             showStatus('Вход выполнен успешно!', 'success');
             
-            // Сообщаем родительскому окну об успехе
-            try {
-                if (window.opener) {
-                    window.opener.postMessage({ 
-                        type: 'AUTH_SUCCESS',
-                        userId: result.user.id,
-                        email: result.user.email 
-                    }, '*');
-                }
-            } catch (e) {
-                console.log('Не удалось сообщить об успешной авторизации:', e);
-            }
-            
-            // Закрываем окно через 1.5 секунды
+            // Закрываем окно через 1 секунду
             setTimeout(() => {
                 window.close();
-            }, 1500);
+            }, 1000);
         } else {
             showStatus(`Ошибка: ${result.error}`, 'error');
         }
@@ -95,23 +82,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (result.success) {
             showStatus('Регистрация успешна! Входим...', 'success');
             
-            // Сообщаем родительскому окну об успехе
-            try {
-                if (window.opener) {
-                    window.opener.postMessage({ 
-                        type: 'AUTH_SUCCESS',
-                        userId: result.user.id,
-                        email: result.user.email 
-                    }, '*');
-                }
-            } catch (e) {
-                console.log('Не удалось сообщить об успешной авторизации:', e);
-            }
-            
-            // Закрываем окно через 1.5 секунды
+            // Закрываем окно через 1 секунду
             setTimeout(() => {
                 window.close();
-            }, 1500);
+            }, 1000);
         } else {
             showStatus(`Ошибка: ${result.error}`, 'error');
         }
@@ -121,20 +95,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('skipAuth').addEventListener('click', () => {
         showStatus('Продолжаем без авторизации', 'info');
         
-        // Сообщаем о пропуске авторизации
-        try {
-            if (window.opener) {
-                window.opener.postMessage({ 
-                    type: 'AUTH_SKIPPED'
-                }, '*');
-            }
-        } catch (e) {
-            console.log('Не удалось сообщить о пропуске:', e);
-        }
+        // Сохраняем флаг пропуска в localStorage
+        localStorage.setItem('auth_skipped', 'true');
         
         setTimeout(() => {
             window.close();
-        }, 1000);
+        }, 800);
     });
     
     // Enter для быстрого входа

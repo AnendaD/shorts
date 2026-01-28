@@ -40,12 +40,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
-    // Кнопка обновления
-    document.getElementById('upgradeBtn').addEventListener('click', () => {
-        showStatus('Премиум версия скоро будет доступна!', 'success');
-        // Здесь будет логика перехода на премиум
-    });
-    
     // Сохранение настроек
     document.getElementById('saveBtn').addEventListener('click', saveSettings);
     
