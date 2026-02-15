@@ -1,5 +1,5 @@
 // auth.js - Модуль авторизации
-const AUTH_SERVICE_URL = 'http://localhost:8080'; // URL вашего gRPC сервиса
+const AUTH_SERVICE_URL = 'https://constant-nari-anenda-90e2b82b.koyeb.app'; // URL вашего gRPC сервиса
 const APP_ID = 1; // ID вашего приложения в SSO системе
 
 class AuthManager {
