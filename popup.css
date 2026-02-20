@@ -480,116 +480,115 @@ button {
 }
 
 /* Темная тема */
-@media (prefers-color-scheme: dark) {
-    body {
-        background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%);
-    }
-    
-    .container {
-        background: #2d3748;
-        color: #e2e8f0;
-    }
-    
-    .stats, .history, .extended-stats {
-        background: #4a5568;
-        color: #e2e8f0;
-    }
-    
-    .stat-label, .limit-info, .label {
-        color: #cbd5e0;
-    }
 
-    #dailyLimit {
-        color:#cbd5e0;
-    }
-    
-    .progress-container {
-        background: #718096;
-    }
-    
-    .stat-row .stat-value {
-        color: #a78bfa;
-    }
-    
-    .extended-stats .stat-item {
-        background: rgba(255, 255, 255, 0.05);
-    }
-    
-    .extended-stats .stat-item:hover {
-        background: rgba(255, 255, 255, 0.1);
-    }
-    
-    .extended-stats .stat-label {
-        color: #cbd5e0;
-    }
-    
-    .extended-stats .stat-value {
-        color: #a78bfa;
-    }
-    
-    .user-info {
-        background: rgba(102, 126, 234, 0.15);
-        border-color: rgba(102, 126, 234, 0.3);
-    }
-    
-    .user-email {
-        color: #e2e8f0;
-    }
-    
-    .auth-header h3 {
-        color: #a78bfa;
-    }
-    
-    .auth-subtitle {
-        color: #cbd5e0;
-    }
-    
-    .btn-secondary {
-        background: rgba(102, 126, 234, 0.2);
-        color: #a78bfa;
-        border-color: rgba(102, 126, 234, 0.4);
-    }
-    
-    .btn-secondary:hover {
-        background: rgba(102, 126, 234, 0.3);
-    }
-    
-    .btn-skip {
-        color: #cbd5e0;
-    }
-    
-    .btn-skip:hover {
-        color: white;
-        background: rgba(255, 255, 255, 0.1);
-    }
-    
-    .sync-info {
-        background: rgba(102, 126, 234, 0.1);
-        border-color: rgba(102, 126, 234, 0.2);
-    }
-    
-    .sync-status {
-        color: #cbd5e0;
-    }
-    
-    .btn-sync {
-        background: rgba(102, 126, 234, 0.2);
-        border-color: rgba(102, 126, 234, 0.4);
-        color: #a78bfa;
-    }
-    
-    .btn-sync:hover {
-        background: rgba(102, 126, 234, 0.3);
-    }
-    
-    .bar {
-        background: linear-gradient(to top, #667eea, #a78bfa);
-    }
-    
-    .bar:hover {
-        background: linear-gradient(to top, #a78bfa, #667eea);
-        box-shadow: 0 0 10px rgba(102, 126, 234, 0.5);
-    }
+body {
+    background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%);
+}
+
+.container {
+    background: #2d3748;
+    color: #e2e8f0;
+}
+
+.stats, .history, .extended-stats {
+    background: #4a5568;
+    color: #e2e8f0;
+}
+
+.stat-label, .limit-info, .label {
+    color: #cbd5e0;
+}
+
+#dailyLimit {
+    color:#cbd5e0;
+}
+
+.progress-container {
+    background: #718096;
+}
+
+.stat-row .stat-value {
+    color: #a78bfa;
+}
+
+.extended-stats .stat-item {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.extended-stats .stat-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.extended-stats .stat-label {
+    color: #cbd5e0;
+}
+
+.extended-stats .stat-value {
+    color: #a78bfa;
+}
+
+.user-info {
+    background: rgba(102, 126, 234, 0.15);
+    border-color: rgba(102, 126, 234, 0.3);
+}
+
+.user-email {
+    color: #e2e8f0;
+}
+
+.auth-header h3 {
+    color: #a78bfa;
+}
+
+.auth-subtitle {
+    color: #cbd5e0;
+}
+
+.btn-secondary {
+    background: rgba(102, 126, 234, 0.2);
+    color: #a78bfa;
+    border-color: rgba(102, 126, 234, 0.4);
+}
+
+.btn-secondary:hover {
+    background: rgba(102, 126, 234, 0.3);
+}
+
+.btn-skip {
+    color: #cbd5e0;
+}
+
+.btn-skip:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.sync-info {
+    background: rgba(102, 126, 234, 0.1);
+    border-color: rgba(102, 126, 234, 0.2);
+}
+
+.sync-status {
+    color: #cbd5e0;
+}
+
+.btn-sync {
+    background: rgba(102, 126, 234, 0.2);
+    border-color: rgba(102, 126, 234, 0.4);
+    color: #a78bfa;
+}
+
+.btn-sync:hover {
+    background: rgba(102, 126, 234, 0.3);
+}
+
+.bar {
+    background: linear-gradient(to top, #667eea, #a78bfa);
+}
+
+.bar:hover {
+    background: linear-gradient(to top, #a78bfa, #667eea);
+    box-shadow: 0 0 10px rgba(102, 126, 234, 0.5);
 }
 
 /* Адаптивность */

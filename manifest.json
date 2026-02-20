@@ -13,7 +13,8 @@
   ],
   "host_permissions": [
     "https://*.youtube.com/*",
-    "https://constant-nari-anenda-90e2b82b.koyeb.app"
+    "https://constant-nari-anenda-90e2b82b.koyeb.app",
+    "https://sso-bamj.onrender.com"
   ],
   "background": {
     "service_worker": "background.js",

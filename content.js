@@ -11,6 +11,33 @@ let progressStuckTimer = null;
 let windowHasFocus = true; 
 let popupOpen = false;
 
+// Сбрасываем скорость воспроизведения до 1x
+function resetPlaybackRate() {
+    // Сбрасываем сохранённую скорость в localStorage YouTube
+    try {
+        const val = localStorage.getItem('yt-player-playback-rate');
+        if (val) {
+            const parsed = JSON.parse(val);
+            if (parsed.data && parsed.data !== 1) {
+                localStorage.setItem('yt-player-playback-rate', JSON.stringify({ data: 1 }));
+            }
+        }
+    } catch (e) {}
+
+    // Напрямую сбрасываем на video-элементе (с повторными попытками)
+    const tryReset = () => {
+        const video = document.querySelector('video');
+        if (video) {
+            video.playbackRate = 1;
+            video.defaultPlaybackRate = 1;
+        }
+    };
+    tryReset();
+    setTimeout(tryReset, 500);
+    setTimeout(tryReset, 1500);
+    setTimeout(tryReset, 3000);
+}
+
 // Получаем ID вкладки
 chrome.runtime.sendMessage({ type: 'GET_TAB_ID' }, (response) => {
     if (chrome.runtime.lastError) {
@@ -89,6 +116,7 @@ function checkLimitBeforeStart(callback) {
             if (checkIfOnShortsPage() && redirectUrl) {
                 console.log('🚫 Попытка открыть Shorts при достигнутом лимите, редирект');
                 if (!window.location.href.includes(redirectUrl)) {
+                    resetPlaybackRate();
                     window.location.href = redirectUrl;
                 }
             }
@@ -180,6 +208,7 @@ function sendHeartbeat() {
                 
                 if (response.redirectUrl && checkIfOnShortsPage()) {
                     if (!window.location.href.includes(response.redirectUrl)) {
+                        resetPlaybackRate();
                         window.location.href = response.redirectUrl;
                     }
                 }
@@ -313,6 +342,7 @@ function checkUrlChange() {
                 if (isLimitReached && checkIfOnShortsPage() && redirectUrl) {
                     // Лимит достигнут и мы на шортсах - делаем редирект
                     if (!window.location.href.includes(redirectUrl)) {
+                        resetPlaybackRate();
                         window.location.href = redirectUrl;
                     }
                 } else {
@@ -336,6 +366,11 @@ function checkUrlChange() {
 function init() {
     console.log('🚀 YouTube Shorts Limiter запущен');
     console.log('📍 Текущий URL:', window.location.href);
+
+    // Если мы на странице назначения (не шортсы) - сбрасываем скорость
+    if (!checkIfOnShortsPage()) {
+        resetPlaybackRate();
+    }
     
     // Начинаем с проверки лимита
     checkLimitBeforeStart((isLimitReached) => {
@@ -463,6 +498,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             
             if (checkIfOnShortsPage() && redirectUrl) {
                 if (!window.location.href.includes(redirectUrl)) {
+                    resetPlaybackRate();
                     window.location.href = redirectUrl;
                 }
             }
