@@ -1,261 +1,108 @@
-
-
-let isWatchingShorts = false;
+let isTracking = false;
 let startTime = null;
 let intervalId = null;
 let currentTabId = null;
+let lastUrl = window.location.href;
 let limitReached = false;
+let redirectUrl = null;
+let lastProgressValue = -1;
+let lastProgressUpdate = Date.now();
+let progressStuckTimer = null;
+let windowHasFocus = true; 
+let popupOpen = false;
 
-// НОВОЕ: Отслеживание активности пользователя
-let lastUserActivity = Date.now();
-let videoLoopCount = 0;
-let lastVideoUrl = '';
-let inactivityCheckInterval = null;
+// Сбрасываем скорость воспроизведения до 1x
+function resetPlaybackRate() {
+    // Сбрасываем сохранённую скорость в localStorage YouTube
+    try {
+        const val = localStorage.getItem('yt-player-playback-rate');
+        if (val) {
+            const parsed = JSON.parse(val);
+            if (parsed.data && parsed.data !== 1) {
+                localStorage.setItem('yt-player-playback-rate', JSON.stringify({ data: 1 }));
+            }
+        }
+    } catch (e) {}
 
-// Подавление TrustedScriptURL ошибок
-(function() {
-    'use strict';
-    
-    if (typeof window === 'undefined') return;
-    
-    const originalError = console.error;
-    const originalWarn = console.warn;
-    
-    console.error = function(...args) {
-        const message = String(args.join(' '));
-        if (message.includes('TrustedScriptURL') || 
-            message.includes('Failed to set the \'src\' property')) {
-            return;
-        }
-        originalError.apply(console, args);
-    };
-    
-    console.warn = function(...args) {
-        const message = String(args.join(' '));
-        if (message.includes('TrustedScriptURL') || 
-            message.includes('Failed to set the \'src\' property')) {
-            return;
-        }
-        originalWarn.apply(console, args);
-    };
-    
-    const errorHandler = function(event) {
-        const message = event.message || String(event.error || '');
-        if (message.includes('TrustedScriptURL') || 
-            message.includes('Failed to set the \'src\' property')) {
-            event.preventDefault();
-            event.stopPropagation();
-            event.stopImmediatePropagation();
-            return false;
+    // Напрямую сбрасываем на video-элементе (с повторными попытками)
+    const tryReset = () => {
+        const video = document.querySelector('video');
+        if (video) {
+            video.playbackRate = 1;
+            video.defaultPlaybackRate = 1;
         }
     };
-    
-    window.addEventListener('error', errorHandler, true);
-    
-    window.addEventListener('unhandledrejection', (event) => {
-        const reason = event.reason;
-        const message = String(reason?.message || reason || '');
-        if (message.includes('TrustedScriptURL') || 
-            message.includes('Failed to set the \'src\' property')) {
-            event.preventDefault();
-            return false;
-        }
-    }, true);
-})();
-
+    tryReset();
+    setTimeout(tryReset, 500);
+    setTimeout(tryReset, 1500);
+    setTimeout(tryReset, 3000);
+}
 
 // Получаем ID вкладки
 chrome.runtime.sendMessage({ type: 'GET_TAB_ID' }, (response) => {
     if (chrome.runtime.lastError) {
-        console.warn('⚠️ Ошибка получения Tab ID:', chrome.runtime.lastError.message);
         return;
     }
     
     if (response && response.tabId) {
         currentTabId = response.tabId;
         console.log('✅ Tab ID получен:', currentTabId);
-    } else {
-        console.warn('⚠️ Не удалось получить Tab ID');
     }
 });
 
-// НОВОЕ: Обработчик сообщений от background script
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    console.log('📨 Получено сообщение:', message.type);
+// Проверяем, находимся ли на странице шортсов
+function checkIfOnShortsPage() {
+    try {
+        const url = window.location.href;
+        return url.includes('/shorts/');
+    } catch (error) {
+        return false;
+    }
+}
+
+// Проверяем, играет ли видео по прогресс-бару
+function isVideoPlaying() {
+    // Находим элемент прогресс-бара
+    const progressBar = document.querySelector('div[role="slider"].ytPlayerProgressBarDragContainer');
     
-    switch (message.type) {
-        case 'PAUSE_TRACKING':
-            console.log('⏸️ Получен сигнал паузы');
-        // Пауза всегда должна работать, независимо от popup
-        if (isWatchingShorts) {
-            stopTracking();
-        }
-        sendResponse({ success: true });
-        break;
-            
-        case 'CHECK_STATE':
-            console.log('🔍 Проверка состояния');
-            // Проверяем, нужно ли начать отслеживание
-            setTimeout(() => {
-                monitorShorts();
-            }, 100);
-            sendResponse({ success: true });
-            break;
+    if (!progressBar) {
+        return false;
     }
     
-    return true;
-});
-
-// НОВОЕ: Добавим функцию для проверки, активен ли popup
-function checkIfPopupOpen(callback) {
-    chrome.runtime.sendMessage({ type: 'IS_POPUP_OPEN' }, (response) => {
-        if (chrome.runtime.lastError) {
-            callback(false);
-            return;
-        }
-        callback(response ? response.popupOpen : false);
-    });
-}
-
-// НОВОЕ: Отслеживание активности пользователя
-function setupActivityTracking() {
-    const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
-    
-    events.forEach(eventType => {
-        document.addEventListener(eventType, () => {
-            lastUserActivity = Date.now();
-            videoLoopCount = 0; // Сбрасываем счетчик повторов при активности
-        }, { passive: true, capture: true });
-    });
-    
-    console.log('👆 Отслеживание активности пользователя включено');
-}
-
-// НОВОЕ: Проверка неактивности
-function checkInactivity() {
+    // Получаем текущее значение прогресса
+    const currentValue = parseInt(progressBar.getAttribute('aria-valuenow') || '0');
     const now = Date.now();
-    const timeSinceActivity = now - lastUserActivity;
     
-    // Если нет активности более 2 минут (120000 мс)
-    if (timeSinceActivity > 120000 && isWatchingShorts) {
-        console.log('😴 Пользователь неактивен более 2 минут, останавливаем отслеживание');
-        stopTracking();
+    // Если значение изменилось с момента последней проверки
+    if (currentValue !== lastProgressValue) {
+        lastProgressValue = currentValue;
+        lastProgressUpdate = now;
+        
+        // Сбрасываем таймер "застрявшего" прогресса
+        clearTimeout(progressStuckTimer);
+        
+        // Видео явно играет, если значение прогресса меняется
+        return true;
+    }
+    
+    // Если значение не менялось какое-то время
+    const timeSinceLastUpdate = now - lastProgressUpdate;
+    
+    // Видео считается играющим, если последнее обновление было меньше 1.5 секунд назад
+    // НЕ ЗАВИСИМО от windowHasFocus или popupOpen
+    if (timeSinceLastUpdate < 1500) {
         return true;
     }
     
     return false;
 }
 
-// НОВОЕ: Отслеживание повторов видео
-function trackVideoLoop() {
-    const video = document.querySelector('video');
-    if (!video) return;
-    
-    const currentUrl = window.location.href;
-    
-    // Проверяем, повторилось ли видео
-    if (video.currentTime < 2 && video.duration > 0) {
-        if (currentUrl === lastVideoUrl) {
-            videoLoopCount++;
-            console.log('🔄 Видео повторилось:', videoLoopCount, 'раз');
-            
-            // Если видео повторилось 2 раза без активности пользователя
-            const timeSinceActivity = Date.now() - lastUserActivity;
-            if (videoLoopCount >= 2 && timeSinceActivity > 10000) { // 10 секунд без активности
-                console.log('⚠️ Видео повторилось 2 раза без активности, останавливаем');
-                stopTracking();
-            }
-        } else {
-            lastVideoUrl = currentUrl;
-            videoLoopCount = 0;
-        }
-    }
-}
-
-function checkIfOnShortsPage() {
-    try {
-        const url = window.location.href;
-        
-        // Проверка по URL
-        const isShortsUrl = url.includes('/shorts/');
-        
-        if (!isShortsUrl) {
-            return false;
-        }
-        
-        // Дополнительная проверка: ищем специфичный прогресс-бар шортсов
-        const shortsProgressBar = document.querySelector('[role="slider"].ytPlayerProgressBarDragContainer');
-        if (shortsProgressBar) {
-            return true;
-        }
-        
-        // Традиционные проверки DOM
-        const hasShortsElements = 
-            document.querySelector('ytd-shorts, [is-shorts], #shorts-container') !== null;
-        
-        return hasShortsElements;
-    } catch (error) {
-        return false;
-    }
-}
-
-function isVideoPlaying() {
-    // Сначала проверяем по прогресс-бару (самый надежный способ)
-    const byProgress = isVideoPlayingByProgress();
-    
-    // Затем проверяем традиционным способом для подстраховки
-    const byVideoElement = isVideoPlayingByElement();
-    
-    // Если хотя бы один метод говорит, что видео играет - считаем, что играет
-    return byProgress || byVideoElement;
-}
-
-function isVideoPlayingByElement() {
-    try {
-        // Ищем ВСЕ видео элементы на странице
-        const videos = document.querySelectorAll('video');
-        
-        if (!videos || videos.length === 0) {
-            return false;
-        }
-        
-        // Проверяем все видео элементы
-        for (const video of videos) {
-            if (video.readyState >= 2 && // HAVE_CURRENT_DATA или больше
-                !video.paused && 
-                !video.ended && 
-                video.currentTime > 0) {
-                return true;
-            }
-        }
-        
-        return false;
-    } catch (error) {
-        return false;
-    }
-}
-
-// НОВОЕ: Проверка, что окно активно
-function isWindowActive() {
-    // Проверяем visibility API
-    if (document.hidden) {
-        return false;
-    }
-    
-    // Проверяем, что окно в фокусе
-    if (!document.hasFocus()) {
-        return false;
-    }
-    
-    return true;
-}
-
+// Проверяем лимит перед началом отслеживания
 function checkLimitBeforeStart(callback) {
     chrome.runtime.sendMessage({
         type: 'CHECK_LIMIT'
     }, (response) => {
         if (chrome.runtime.lastError) {
-            console.error('Ошибка проверки лимита:', chrome.runtime.lastError);
             callback(false);
             return;
         }
@@ -263,113 +110,91 @@ function checkLimitBeforeStart(callback) {
         if (response && response.limitReached) {
             console.log('🚫 Лимит уже достигнут!');
             limitReached = true;
+            redirectUrl = response.redirectUrl;
             
-             if (checkIfOnShortsPage() && response.redirectUrl) {
-        console.log('🚫 Попытка открыть Shorts при достигнутом лимите, редирект');
-        // Проверяем, что мы не уже на видео для редиректа
-        if (!window.location.href.includes(response.redirectUrl)) {
-            window.location.href = response.redirectUrl;  // <-- РЕДИРЕКТ ЗДЕСЬ!
-        }
-    }
+            // Если мы на шортсах и есть URL для редиректа
+            if (checkIfOnShortsPage() && redirectUrl) {
+                console.log('🚫 Попытка открыть Shorts при достигнутом лимите, редирект');
+                if (!window.location.href.includes(redirectUrl)) {
+                    resetPlaybackRate();
+                    window.location.href = redirectUrl;
+                }
+            }
             
             callback(true);
         } else {
             limitReached = false;
+            redirectUrl = null;
             callback(false);
         }
     });
 }
 
+// Начинаем отслеживание времени
 function startTracking() {
-    // НОВОЕ: Проверяем, что окно активно
-    if (!isWindowActive()) {
-        console.log('⏸️ Окно неактивно, не начинаем отслеживание');
-        return;
-    }
+    if (isTracking || !checkIfOnShortsPage()) return;
     
+    // Проверяем лимит перед стартом
     checkLimitBeforeStart((isLimitReached) => {
         if (isLimitReached) {
             console.log('🚫 Отслеживание не начато - лимит исчерпан');
             return;
         }
         
-        if (!isWatchingShorts) {
-            isWatchingShorts = true;
-            startTime = Date.now();
-            lastUserActivity = Date.now(); // Сбрасываем при старте
-            videoLoopCount = 0;
-            lastVideoUrl = window.location.href;
-            
-            console.log('🎬 Начали отслеживание Shorts');
-            
-            chrome.runtime.sendMessage({
-                type: 'SHORTS_START',
-                tabId: currentTabId,
-                timestamp: startTime,
-                url: window.location.href
-            });
-            
-            // Heartbeat каждую секунду
-            intervalId = setInterval(() => {
-                sendHeartbeat();
-                trackVideoLoop(); // Проверяем повторы
-            }, 1000);
-            
-            // НОВОЕ: Проверка неактивности каждые 10 секунд
-            inactivityCheckInterval = setInterval(() => {
-                checkInactivity();
-            }, 10000);
-            
-            sendHeartbeat();
-        }
-    });
-}
-
-function stopTracking() {
-    // НОВОЕ: Проверяем, открыт ли popup
-    checkIfPopupOpen((isPopupOpen) => {
-        if (isPopupOpen) {
-            console.log('ℹ️ Popup открыт, но останавливаем отслеживание из-за паузы');
-        }
+        isTracking = true;
+        startTime = Date.now();
         
-        if (isWatchingShorts) {
-            isWatchingShorts = false;
-            const endTime = Date.now();
-            
-            if (intervalId) {
-                clearInterval(intervalId);
-                intervalId = null;
-            }
-            
-            if (inactivityCheckInterval) {
-                clearInterval(inactivityCheckInterval);
-                inactivityCheckInterval = null;
-            }
-            
-            const timeSpent = Math.floor((endTime - startTime) / 1000);
-            
-            chrome.runtime.sendMessage({
-                type: 'SHORTS_END',
-                tabId: currentTabId,
-                startTime: startTime,
-                endTime: endTime,
-                timeSpent: timeSpent,
-                url: window.location.href
-            });
-            
-            console.log('⏹️ Остановили отслеживание Shorts, время:', timeSpent, 'секунд');
-            startTime = null;
-            videoLoopCount = 0;
-        }
+        console.log('🎬 Начинаем отслеживание (видео играет)');
+        
+        chrome.runtime.sendMessage({
+            type: 'SHORTS_START',
+            tabId: currentTabId,
+            timestamp: startTime,
+            url: window.location.href
+        });
+        
+        // Heartbeat каждую секунду
+        intervalId = setInterval(sendHeartbeat, 1000);
     });
 }
 
+// Останавливаем отслеживание времени
+function stopTracking() {
+    if (!isTracking) return;
+    
+    isTracking = false;
+    const endTime = Date.now();
+    
+    if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+    }
+    
+    // Очищаем таймер застрявшего прогресса
+    clearTimeout(progressStuckTimer);
+    progressStuckTimer = null;
+    
+    const timeSpent = Math.floor((endTime - startTime) / 1000);
+    
+    console.log('⏹️ Останавливаем отслеживание, время:', timeSpent, 'сек');
+    
+    chrome.runtime.sendMessage({
+        type: 'SHORTS_END',
+        tabId: currentTabId,
+        startTime: startTime,
+        endTime: endTime,
+        timeSpent: timeSpent,
+        url: window.location.href
+    });
+    
+    startTime = null;
+}
+
+// Отправляем heartbeat каждую секунду
 function sendHeartbeat() {
-    if (isWatchingShorts && startTime) {
+    if (isTracking && startTime) {
         const currentTime = Date.now();
         const timeSpent = Math.floor((currentTime - startTime) / 1000);
-        
-        //console.log('💓 Heartbeat:', timeSpent, 'сек');
         
         chrome.runtime.sendMessage({
             type: 'SHORTS_HEARTBEAT',
@@ -377,247 +202,251 @@ function sendHeartbeat() {
             timeSpent: timeSpent,
             url: window.location.href
         }, (response) => {
-            if (chrome.runtime.lastError) {
-                console.warn('Ошибка отправки heartbeat:', chrome.runtime.lastError);
-                return;
-            }
-            
             if (response && response.shouldRedirect) {
                 console.log('🚫 Получен сигнал редиректа от background');
                 stopTracking();
                 
                 if (response.redirectUrl && checkIfOnShortsPage()) {
-                     if (!window.location.href.includes(response.redirectUrl)) {
+                    if (!window.location.href.includes(response.redirectUrl)) {
+                        resetPlaybackRate();
                         window.location.href = response.redirectUrl;
-                     }
+                    }
                 }
             }
         });
-        
-        // ИСПРАВЛЕНО: Убрано, чтобы не создавать конфликт данных
-        // Popup сам запрашивает актуальные данные каждую секунду
     }
 }
 
-function monitorShorts() {
-    const currentlyOnShorts = checkIfOnShortsPage();
-    const videoPlaying = isVideoPlaying();
-    const windowActive = isWindowActive();
+// Функция для проверки "застрял" ли прогресс
+function checkProgressStuck() {
+    if (!isTracking || !checkIfOnShortsPage()) return;
     
-    // Только логируем если на шортс
-    if (currentlyOnShorts) {
-        // Получаем информацию о прогрессе
-        let progressInfo = { value: 0, found: false };
-        try {
-            const progressSlider = document.querySelector('[role="slider"][aria-valuenow]');
-            if (progressSlider) {
-                progressInfo = {
-                    value: parseInt(progressSlider.getAttribute('aria-valuenow') || '0'),
-                    text: progressSlider.getAttribute('aria-valuetext') || '',
-                    found: true
-                };
-            }
-        } catch (e) {
-            // Игнорируем ошибки
-        }
-        
-        console.log('🔍 Мониторинг Shorts:', {
-            onShortsPage: true,
-            videoPlaying: videoPlaying,
-            byProgress: isVideoPlayingByProgress(),
-            byElement: isVideoPlayingByElement(),
-            windowActive: windowActive,
-            isTracking: isWatchingShorts,
-            progress: progressInfo,
-            videoElements: document.querySelectorAll('video').length
-        });
-    }
+    const now = Date.now();
+    const timeSinceLastUpdate = now - lastProgressUpdate;
     
-    // Убираем асинхронную проверку popup из условий остановки
-    if (!windowActive && isWatchingShorts) {
-        // Проверяем popup только для логики смены вкладки
-        checkIfPopupOpen((isPopupOpen) => {
-            if (!isPopupOpen) {
-                console.log('⏸️ Окно неактивно, останавливаем отслеживание');
-                stopTracking();
-            }
-        });
-        return;
-    }
-    
-    if (currentlyOnShorts && !isWatchingShorts) {
-        checkLimitBeforeStart((isLimitReached) => {
-            if (isLimitReached) {
-                return;
-            }
-            
-            if (videoPlaying && windowActive && !isWatchingShorts) {
-                console.log('✅ Условия для начала отслеживания выполнены');
-                startTracking();
-            }
-        });
-    } else if ((!currentlyOnShorts || !videoPlaying) && isWatchingShorts) {
-        // ИСПРАВЛЕНО: Останавливаем ВСЕГДА если видео на паузе или не на шортс
-        console.log('⏹️ Видео на паузе или не на шортс, останавливаем отслеживание');
+    // Если прогресс не обновлялся более 1.5 секунд - видео на паузе
+    if (timeSinceLastUpdate > 1500) {
+        console.log('⏸️ Прогресс не обновляется', timeSinceLastUpdate, 'мс - видео на паузе');
         stopTracking();
     }
 }
 
-let lastUrl = window.location.href;
+// Основная функция проверки состояния
+function checkVideoState() {
+    // Если не на шортсах - останавливаем
+    if (!checkIfOnShortsPage()) {
+        if (isTracking) {
+            console.log('🚫 Не на шортсах, останавливаем');
+            stopTracking();
+        }
+        return;
+    }
+    
+    const videoPlaying = isVideoPlaying();
+    
+    console.log('🔍 Проверка состояния:', {
+        videoPlaying: videoPlaying,
+        isTracking: isTracking,
+        windowHasFocus: windowHasFocus,
+        popupOpen: popupOpen
+    });
 
+    // Если видео играет и мы еще не отслеживаем
+    if (videoPlaying && !isTracking) {
+        console.log('▶️ Видео играет, начинаем отслеживание');
+        startTracking();
+    } 
+    // Если видео на паузе и мы отслеживаем
+    else if (!videoPlaying && isTracking) {
+        console.log('⏸️ Видео на паузе, останавливаем');
+        stopTracking();
+    }
+    
+    // Если видео играет, устанавливаем таймер для проверки "застрявшего" прогресса
+    if (videoPlaying && isTracking) {
+        clearTimeout(progressStuckTimer);
+        progressStuckTimer = setTimeout(checkProgressStuck, 1600);
+    }
+}
+
+// Создаем наблюдатель за прогресс-баром
+let progressObserver = null;
+
+function setupProgressObserver() {
+    try {
+        // Очищаем предыдущего наблюдателя
+        if (progressObserver) {
+            progressObserver.disconnect();
+            progressObserver = null;
+        }
+        
+        // Ищем прогресс-бар
+        const progressBar = document.querySelector('div[role="slider"].ytPlayerProgressBarDragContainer');
+        
+        if (!progressBar) {
+            console.log('🔍 Прогресс-бар не найден, пробую через 500мс');
+            setTimeout(setupProgressObserver, 500);
+            return;
+        }
+        
+        // Получаем начальное значение
+        const initialValue = parseInt(progressBar.getAttribute('aria-valuenow') || '0');
+        lastProgressValue = initialValue;
+        lastProgressUpdate = Date.now();
+        
+        console.log('✅ Найден прогресс-бар, начальное значение:', initialValue, '%');
+        
+        // Создаем наблюдатель за изменениями aria-valuenow
+        progressObserver = new MutationObserver((mutations) => {
+            mutations.forEach(mutation => {
+                if (mutation.type === 'attributes' && mutation.attributeName === 'aria-valuenow') {
+                    const newValue = parseInt(mutation.target.getAttribute('aria-valuenow') || '0');
+                    checkVideoState();
+                }
+            });
+        });
+        
+        // Начинаем наблюдение за атрибутом aria-valuenow
+        progressObserver.observe(progressBar, {
+            attributes: true,
+            attributeFilter: ['aria-valuenow']
+        });
+        
+        // Проверяем начальное состояние
+        setTimeout(() => {
+            checkVideoState();
+        }, 300);
+        
+    } catch (error) {
+        console.warn('⚠️ Ошибка в setupProgressObserver:', error);
+        setTimeout(setupProgressObserver, 1000);
+    }
+}
+
+// Проверка изменения URL
 function checkUrlChange() {
     try {
         const currentUrl = window.location.href;
         if (currentUrl !== lastUrl) {
-            lastUrl = currentUrl;
             console.log('🌐 URL изменился:', currentUrl);
+            lastUrl = currentUrl;
             
-            // Сбрасываем счетчик повторов при смене URL
-            videoLoopCount = 0;
-            lastVideoUrl = currentUrl;
+            // Сбрасываем значения прогресса при смене URL
+            lastProgressValue = -1;
+            lastProgressUpdate = Date.now();
+            clearTimeout(progressStuckTimer);
+            progressStuckTimer = null;
             
-            if (currentUrl.includes('/shorts/')) {
-                checkLimitBeforeStart((isLimitReached) => {
-                    if (!isLimitReached) {
-                        monitorShorts();
+            // Проверяем лимит при каждом изменении URL
+            checkLimitBeforeStart((isLimitReached) => {
+                if (isLimitReached && checkIfOnShortsPage() && redirectUrl) {
+                    // Лимит достигнут и мы на шортсах - делаем редирект
+                    if (!window.location.href.includes(redirectUrl)) {
+                        resetPlaybackRate();
+                        window.location.href = redirectUrl;
                     }
-                });
-            } else {
-                monitorShorts();
-            }
+                } else {
+                    // Проверяем состояние видео
+                    setTimeout(() => {
+                        checkVideoState();
+                        // Переинициализируем наблюдатель для нового шортса
+                        if (currentUrl.includes('/shorts/')) {
+                            setTimeout(setupProgressObserver, 500);
+                        }
+                    }, 300);
+                }
+            });
         }
     } catch (e) {
         // Игнорируем ошибки
     }
 }
 
-let videoListeners = new WeakSet();
-function setupVideoListeners() {
-    try {
-        const videos = document.querySelectorAll('video');
-        videos.forEach(video => {
-            if (videoListeners.has(video)) return;
-            
-            try {
-                video.addEventListener('play', () => {
-                    console.log('▶️ Видео начало играть');
-                    lastUserActivity = Date.now();
-                    monitorShorts();
-                }, { passive: true, once: false });
-                
-                video.addEventListener('pause', () => {
-                    console.log('⏸️ Видео приостановлено');
-                    monitorShorts();
-                }, { passive: true, once: false });
-                
-                video.addEventListener('ended', () => {
-                    console.log('🏁 Видео закончилось');
-                    monitorShorts();
-                }, { passive: true, once: false });
-                
-                video.addEventListener('loadeddata', () => {
-                    monitorShorts();
-                }, { passive: true, once: false });
-                
-                videoListeners.add(video);
-            } catch (error) {
-                // Игнорируем ошибки
-            }
-        });
-    } catch (error) {
-        // Игнорируем ошибки
-    }
-}
-
+// Инициализация
 function init() {
-    console.log('🚀 Shorts Limiter запущен на YouTube');
+    console.log('🚀 YouTube Shorts Limiter запущен');
     console.log('📍 Текущий URL:', window.location.href);
+
+    // Если мы на странице назначения (не шортсы) - сбрасываем скорость
+    if (!checkIfOnShortsPage()) {
+        resetPlaybackRate();
+    }
     
-    // Настройка отслеживания активности
-    setupActivityTracking();
-    
-    // Настройка наблюдателя за прогресс-баром
-    setupProgressBarObserver();
-    
-    setupVideoListeners();
-    
-    console.log('⚡ Немедленная проверка при загрузке');
-    monitorShorts();
-    
-    // Запланированные проверки
-    setTimeout(() => {
-        console.log('⏰ Проверка через 500ms');
-        monitorShorts();
-        setupVideoListeners();
-        setupProgressBarObserver(); // Повторная попытка найти прогресс-бар
-    }, 500);
-    
-    setTimeout(() => {
-        console.log('⏰ Проверка через 1 секунду');
-        monitorShorts();
-        setupVideoListeners();
-    }, 1000);
-    
-    const monitorInterval = setInterval(() => {
-        monitorShorts();
-        setupVideoListeners();
-    }, 1000);
-    
-    const urlCheckInterval = setInterval(checkUrlChange, 1000);
-    
-    // НОВОЕ: Отслеживание visibility change
-    document.addEventListener('visibilitychange', () => {
-        if (document.hidden) {
-            console.log('👁️ Страница скрыта');
-            // Проверяем, открыт ли popup
-            checkIfPopupOpen((isPopupOpen) => {
-                if (!isPopupOpen && isWatchingShorts) {
+    // Начинаем с проверки лимита
+    checkLimitBeforeStart((isLimitReached) => {
+        if (isLimitReached && checkIfOnShortsPage() && redirectUrl) {
+            // Немедленный редирект если лимит достигнут
+            if (!window.location.href.includes(redirectUrl)) {
+                window.location.href = redirectUrl;
+                return;
+            }
+        }
+        
+        // Инициализируем наблюдение за прогресс-баром
+        setupProgressObserver();
+        
+        // Проверяем изменение URL каждую секунду
+        const urlCheckInterval = setInterval(checkUrlChange, 1000);
+        
+        // Проверяем состояние видео каждые 1 секунды
+        const stateCheckInterval = setInterval(checkVideoState, 1000);
+        
+        // Останавливаем при скрытии страницы
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                console.log('👁️ Страница скрыта (не видна), останавливаем отслеживание');
+                // Страница полностью скрыта (например, переключились на другую вкладку)
+                if (isTracking) {
                     stopTracking();
                 }
-            });
-        } else {
-            console.log('👁️ Страница видима');
-            setTimeout(monitorShorts, 500);
-        }
-    }, { passive: true });
-    
-    // НОВОЕ: Отслеживание фокуса окна
-    window.addEventListener('blur', () => {
-        console.log('🔇 Окно потеряло фокус');
-        // Проверяем, открыт ли popup
-        checkIfPopupOpen((isPopupOpen) => {
-            if (!isPopupOpen && isWatchingShorts) {
-                stopTracking();
+            } else {
+                console.log('👁️ Страница видима, проверяем состояние');
+                setTimeout(checkVideoState, 500);
             }
         });
-    }, { passive: true });
-    
-    window.addEventListener('focus', () => {
-        console.log('🔊 Окно получило фокус');
-        setTimeout(monitorShorts, 500);
-    }, { passive: true });
-    
-    window.addEventListener('beforeunload', () => {
-        if (isWatchingShorts) {
-            stopTracking();
-        }
-        clearInterval(monitorInterval);
-        clearInterval(urlCheckInterval);
-    }, { passive: true });
-    
-    let lastPopState = Date.now();
-    window.addEventListener('popstate', () => {
-        const now = Date.now();
-        if (now - lastPopState > 100) {
-            lastPopState = now;
+        
+        // Останавливаем при потере фокуса окна
+        window.addEventListener('blur', () => {
+            console.log('🔇 Окно потеряло фокус, popup открыт?', popupOpen);
+            windowHasFocus = false;
+            
+            // Если открыт popup - НЕ останавливаем отслеживание
+            if (!popupOpen && isTracking) {
+                console.log('⏸️ Окно потеряло фокус (не popup), останавливаем отслеживание');
+                stopTracking();
+            }
+            // Если открыт popup - просто обновляем переменную, но продолжаем
+        });
+
+        window.addEventListener('focus', () => {
+            console.log('🔊 Окно получило фокус');
+            windowHasFocus = true;
+            // При получении фокуса проверяем состояние видео
+            setTimeout(checkVideoState, 500);
+        });
+        
+        // Также проверяем состояние окна при загрузке
+        windowHasFocus = document.hasFocus();
+        console.log('🎯 Начальное состояние фокуса окна:', windowHasFocus ? 'в фокусе' : 'не в фокусе');
+        
+        // Останавливаем при закрытии вкладки
+        window.addEventListener('beforeunload', () => {
+            if (isTracking) {
+                stopTracking();
+            }
+            clearInterval(urlCheckInterval);
+            clearInterval(stateCheckInterval);
+            clearTimeout(progressStuckTimer);
+        });
+        
+        // Отслеживаем изменения истории
+        window.addEventListener('popstate', () => {
             setTimeout(() => {
                 checkUrlChange();
-                setupVideoListeners();
             }, 200);
-        }
-    }, { passive: true });
-    
-    try {
+        });
+        
+        // Перехватываем pushState/replaceState для SPA-навигации
         const originalPushState = history.pushState;
         const originalReplaceState = history.replaceState;
         
@@ -625,7 +454,6 @@ function init() {
             originalPushState.apply(history, args);
             setTimeout(() => {
                 checkUrlChange();
-                setupVideoListeners();
             }, 200);
         };
         
@@ -633,164 +461,75 @@ function init() {
             originalReplaceState.apply(history, args);
             setTimeout(() => {
                 checkUrlChange();
-                setupVideoListeners();
             }, 200);
         };
-    } catch (error) {
-        // Игнорируем ошибки
-    }
-}
-
-console.log('🔧 Попытка инициализации, readyState:', document.readyState);
-
-if (document.readyState === 'loading') {
-    console.log('⏳ DOM еще загружается, ждем DOMContentLoaded');
-    document.addEventListener('DOMContentLoaded', () => {
-        console.log('✅ DOMContentLoaded сработал');
-        init();
     });
-} else {
-    console.log('✅ DOM уже готов, запускаем init() немедленно');
-    init();
-    
-    setTimeout(() => {
-        console.log('🔄 Повторная проверка через 100ms');
-        monitorShorts();
-        setupVideoListeners();
-    }, 100);
 }
 
-// НОВОЕ: Реинициализация при активации вкладки
-function checkAndReinit() {
-    // Проверяем, инициализирован ли уже мониторинг
-    const monitorIntervalExists = typeof monitorInterval !== 'undefined';
-    
-    if (window.location.href.includes('youtube.com') && !monitorIntervalExists) {
-        console.log('🔄 Обнаружена вкладка YouTube без инициализации, запускаем...');
-        init();
-    }
-}
-
-// Проверяем при загрузке
-if (window.location.href.includes('youtube.com')) {
-    console.log('🔍 Проверяем инициализацию на YouTube');
-    setTimeout(checkAndReinit, 1000);
-}
-
-// НОВОЕ: Слушаем сообщения от background о проверке состояния
+// Обработчик сообщений от background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.type === 'CHECK_STATE') {
-        console.log('🔍 Получен запрос на проверку состояния');
-        checkAndReinit();
-        sendResponse({ success: true });
-    }
+    console.log('📨 Получено сообщение:', message.type);
+    
+    switch (message.type) {
+        case 'PAUSE_TRACKING':
+            console.log('⏸️ Получен сигнал паузы');
+            if (isTracking) {
+                stopTracking();
+            }
+            sendResponse({ success: true });
+            break;
+            
+        case 'CHECK_STATE':
+            console.log('🔍 Проверка состояния по запросу');
+            checkVideoState();
+            sendResponse({ success: true });
+            break;
+            
+        case 'REINITIALIZE':
+            console.log('🔄 Переинициализация по запросу');
+            setTimeout(init, 100);
+            sendResponse({ success: true });
+            break;
+            
+        case 'LIMIT_REACHED':
+            console.log('🚫 Получено уведомление о достижении лимита');
+            limitReached = true;
+            redirectUrl = message.redirectUrl;
+            
+            if (checkIfOnShortsPage() && redirectUrl) {
+                if (!window.location.href.includes(redirectUrl)) {
+                    resetPlaybackRate();
+                    window.location.href = redirectUrl;
+                }
+            }
+            sendResponse({ success: true });
+            break;
+
+        case 'POPUP_STATUS':
+            console.log('📊 Получен статус popup:', message.isOpen ? 'открыт' : 'закрыт');
+            popupOpen = message.isOpen;
+            
+            // Если popup открыт, но окно потеряло фокус - продолжаем отслеживание
+            if (popupOpen && !windowHasFocus) {
+                console.log('📊 Popup открыт, продолжаем отслеживание');
+                // Видео продолжает играть, просто фокус на popup
+                if (isTracking) {
+                    // Не делаем ничего - продолжаем отслеживание
+                }
+            } else if (!popupOpen && !windowHasFocus) {
+                // Popup закрыт и окно не в фокусе - возможно видео на паузе
+                checkVideoState();
+            }
+            sendResponse({ success: true });
+            break;
+            }
+    
     return true;
 });
 
-
-function isVideoPlayingByProgress() {
-    try {
-        // Ищем прогресс-бар воспроизведения
-        const progressSlider = document.querySelector('[role="slider"][aria-valuenow]');
-        
-        if (!progressSlider) {
-            // console.log('❌ Прогресс-бар не найден');
-            return false;
-        }
-        
-        const currentValue = parseInt(progressSlider.getAttribute('aria-valuenow'));
-        const valueText = progressSlider.getAttribute('aria-valuetext') || '';
-        
-        // console.log('🔍 Прогресс-бар:', {
-        //     currentValue: currentValue,
-        //     valueText: valueText,
-        //     slider: progressSlider.className
-        // });
-        
-        // Если значение больше 0 и меньше 100, значит видео играет
-        // (0% - начало, 100% - конец, но обычно видео заканчивается немного раньше)
-        if (currentValue > 0 && currentValue < 99) {
-            return true;
-        }
-        
-        // Дополнительная проверка: если текст содержит "%" и не "0%"
-        if (valueText.includes('%') && !valueText.includes('0%')) {
-            return true;
-        }
-        
-        return false;
-    } catch (error) {
-        console.warn('⚠️ Ошибка в isVideoPlayingByProgress:', error);
-        return false;
-    }
-}
-
-
-let progressObserver = null;
-let lastProgressValue = 0;
-let progressUpdateTime = 0;
-
-function setupProgressBarObserver() {
-    try {
-        // Если уже есть наблюдатель, очищаем его
-        if (progressObserver) {
-            progressObserver.disconnect();
-        }
-        
-        // Создаем MutationObserver для отслеживания изменений прогресс-бара
-        progressObserver = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-                if (mutation.type === 'attributes' && 
-                    (mutation.attributeName === 'aria-valuenow' || 
-                     mutation.attributeName === 'aria-valuetext')) {
-                    
-                    const slider = mutation.target;
-                    const currentValue = parseInt(slider.getAttribute('aria-valuenow') || '0');
-                    const now = Date.now();
-                    
-                    // Проверяем, изменилось ли значение
-                    if (currentValue !== lastProgressValue) {
-                        lastProgressValue = currentValue;
-                        progressUpdateTime = now;
-                        
-                        // console.log('📊 Прогресс-бар обновлен:', {
-                        //     value: currentValue,
-                        //     text: slider.getAttribute('aria-valuetext'),
-                        //     time: new Date().toLocaleTimeString()
-                        // });
-                        
-                        // Если видео играет (значение больше 0), но мы еще не отслеживаем
-                        if (currentValue > 0 && currentValue < 99 && 
-                            !isWatchingShorts && checkIfOnShortsPage()) {
-                            console.log('🔄 Обнаружено воспроизведение по прогресс-бару, начинаем отслеживание');
-                            startTracking();
-                        }
-                        
-                        // Обновляем активность пользователя
-                        lastUserActivity = now;
-                    }
-                }
-            });
-        });
-        
-        // Находим прогресс-бар и начинаем наблюдение
-        const progressSlider = document.querySelector('[role="slider"][aria-valuenow]');
-        if (progressSlider) {
-            lastProgressValue = parseInt(progressSlider.getAttribute('aria-valuenow') || '0');
-            progressUpdateTime = Date.now();
-            
-            progressObserver.observe(progressSlider, {
-                attributes: true,
-                attributeFilter: ['aria-valuenow', 'aria-valuetext']
-            });
-            
-            console.log('👀 Наблюдение за прогресс-баром начато');
-        } else {
-            console.log('🔍 Прогресс-бар не найден, попробуем позже');
-            // Пробуем найти через 1 секунду
-            setTimeout(setupProgressBarObserver, 1000);
-        }
-    } catch (error) {
-        console.warn('⚠️ Ошибка в setupProgressBarObserver:', error);
-    }
+// Запускаем при загрузке страницы
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
 }

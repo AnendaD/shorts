@@ -23,7 +23,7 @@
                         <p>Сколько минут в день вы разрешаете себе смотреть Shorts</p>
                     </div>
                     <div class="setting-control">
-                        <input type="range" id="dailyLimitSlider" min="1" max="180" step="5" value="30">
+                        <input type="range" id="dailyLimitSlider" min="1" max="60" step="1" value="30">
                         <div class="slider-value">
                             <span id="dailyLimitValue">30</span> минут
                         </div>
@@ -94,25 +94,6 @@
                     <p class="warning-text">Это действие нельзя отменить!</p>
                 </div>
             </section>
-
-            <section class="premium-section">
-                <div class="premium-card">
-                    <div class="premium-header">
-                        <span class="premium-badge">✨ ПРЕМИУМ</span>
-                        <h3>Улучшенная версия</h3>
-                    </div>
-                    <ul class="premium-features">
-                        <li>✅ ИИ-анализ эмоций в ленте</li>
-                        <li>✅ Подробные отчёты и тренды</li>
-                        <li>✅ Интеграция с календарями</li>
-                        <li>✅ Расширенная аналитика</li>
-                        <li>✅ Сравнение с другими пользователями</li>
-                    </ul>
-                    <button id="upgradeBtn" class="upgrade-btn">
-                        🚀 Обновить до Premium
-                    </button>
-                </div>
-            </section>
         </main>
 
         <footer class="footer">
@@ -122,7 +103,7 @@
             </div>
             <div class="status-message" id="statusMessage"></div>
             <div class="version-info">
-                Shorts Limiter v1.0 | Free Version
+                Shorts Limiter
             </div>
         </footer>
     </div>

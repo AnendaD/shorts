@@ -1,13 +1,7 @@
-// init.js
-console.log('🔧 Инициализатор загружен');
-
 // Проверяем все открытые вкладки YouTube при запуске расширения
 chrome.tabs.query({ url: "*://*.youtube.com/*" }, (tabs) => {
-    console.log(`🔍 Найдено ${tabs.length} вкладок YouTube`);
     
-    tabs.forEach(tab => {
-        console.log(`📋 Проверяем вкладку ${tab.id}: ${tab.url}`);
-        
+    tabs.forEach(tab => {        
         // Проверяем, загружен ли content script
         chrome.tabs.sendMessage(tab.id, { type: 'PING' })
             .then(() => {
